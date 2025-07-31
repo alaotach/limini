@@ -1,0 +1,31 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp">
+
+    <TextView
+        android:id="@+id/usageTextView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Waiting for usage data..."
+        android:textSize="16sp"/>
+
+    <Button
+        android:id="@+id/startButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Start Tracking"/>
+
+    <Button
+        android:id="@+id/stopButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Stop Tracking"/>
+    
+    <Button
+        android:id="@+id/accessibilityButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Enable Accessibility Service"/>
+</LinearLayout>
