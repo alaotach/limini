@@ -4,12 +4,20 @@
     android:layout_height="match_parent"
     android:padding="16dp">
 
+
     <TextView
         android:id="@+id/usageTextView"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Waiting for usage data..."
         android:textSize="16sp"/>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/usageRecyclerView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingTop="8dp"/>
 
     <Button
         android:id="@+id/startButton"

@@ -5,6 +5,8 @@ import android.view.accessibility.AccessibilityEvent
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.util.Log
+import android.app.usage.UsageStatsManager
+import android.content.Context
 import android.os.Handler
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.core.os.postDelayed
@@ -12,74 +14,75 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 class AppUsageAccessibilityService : AccessibilityService() {
-
+    private val appUsageMap = mutableMapOf<String, AppUsageInfo>()
     private var currPkg = ""
-    private var currApp = ""
     private var startTime = 0L
-    private var currTime = 0L
     private var h: Handler? = null
+
+    data class AppUsageInfo(
+        val packageName: String,
+        var appName: String,
+        var iconRes: ByteArray?,
+        var usageTime: Long
+    )
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             val newPkg = event.packageName?.toString() ?: return
-            if (newPkg != currPkg) {
-                val prevPkg = currPkg
-                val prevApp = currApp
-                val dur = if (startTime != 0L) System.currentTimeMillis() - startTime else 0L
+            val now = System.currentTimeMillis()
+            if (shouldIgnorePackage(newPkg)) {
+                if (currPkg.isNotEmpty() && !shouldIgnorePackage(currPkg)) {
+                    val prev = appUsageMap.getOrPut(currPkg) {
+                        AppUsageInfo(currPkg, getAppLabel(currPkg), getAppIconBytes(currPkg), 0L)
+                    }
+                    prev.usageTime += now - startTime
+                    currPkg = ""
+                    startTime = 0L
+                    sendAllUsageUpdate()
+                }
+                return
+            }
+            if (currPkg.isNotEmpty() && currPkg != newPkg && !shouldIgnorePackage(currPkg)) {
+                val prev = appUsageMap.getOrPut(currPkg) {
+                    AppUsageInfo(currPkg, getAppLabel(currPkg), getAppIconBytes(currPkg), 0L)
+                }
+                prev.usageTime += now - startTime
+            }
+            if (currPkg != newPkg) {
                 currPkg = newPkg
-                currApp = getAppLabel(newPkg)
-                startTime = System.currentTimeMillis()
-                currTime = 0L
-                sendUpdate(prevPkg, prevApp, dur)
-                Log.d("AccessibilityService", "switch $prevApp -> $currApp")
+                startTime = now
+                appUsageMap.getOrPut(currPkg) {
+                    AppUsageInfo(currPkg, getAppLabel(currPkg), getAppIconBytes(currPkg), 0L)
+                }
+                sendAllUsageUpdate()
             }
         }
     }
 
-    private fun sendUpdate(prevPkg: String, prevApp: String, dur: Long) {
+    private fun shouldIgnorePackage(pkg: String): Boolean {
+        val ignorePkgs = setOf(
+            "android", "com.android.systemui", "com.google.android.googlequicksearchbox",
+            "com.android.launcher", "com.android.launcher3", "com.miui.home", "com.huawei.android.launcher",
+            "com.sec.android.app.launcher", "com.oppo.launcher", "com.vivo.launcher", "com.coloros.launcher",
+            "com.samsung.android.app.launcher", "com.lge.launcher2", "com.htc.launcher", "com.zui.launcher"
+        )
+        return pkg in ignorePkgs || pkg.startsWith("com.android.inputmethod") || pkg.isBlank()
+    }
+
+    private fun sendAllUsageUpdate() {
         val now = System.currentTimeMillis()
-        val sess = if (startTime != 0L) now - startTime else 0L
-        val msg = makeText(sess, prevApp, dur)
-
-        Log.d("AccessibilityService", msg)
-
+        val usageList = appUsageMap.values.map { info ->
+            val session = if (info.packageName == currPkg) (now - startTime) else 0L
+            mapOf(
+                "packageName" to info.packageName,
+                "appName" to info.appName,
+                "icon" to info.iconRes,
+                "usageTime" to info.usageTime + session
+            )
+        }.sortedByDescending { it["usageTime"] as Long }
         val i = Intent("com.alaotach.limini.USAGE_UPDATE")
-        i.putExtra("usage", msg)
-        i.putExtra("currentApp", currApp)
-        i.putExtra("currentPackage", currPkg)
-        i.putExtra("sessionTime", sess)
-        i.putExtra("previousApp", prevApp)
-        i.putExtra("previousSessionTime", dur)
+        i.putExtra("usageList", ArrayList(usageList.map { HashMap(it) }))
         LocalBroadcastManager.getInstance(this).sendBroadcast(i)
-    }
-
-    private fun makeText(sess: Long, prevApp: String?, prevDur: Long?): String {
-        val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
-        val s = StringBuilder()
-        s.append("⏱ $time\n\n")
-
-        if (currApp.isNotEmpty()) {
-            s.append("Now: $currApp\n")
-            if (sess > 1000) {
-                val m = sess / 60000
-                val s1 = (sess % 60000) / 1000
-                s.append("Time: ${if (m > 0) "${m}m " else ""}${s1}s\n")
-            } else {
-                s.append("New app\n")
-            }
-            s.append("Pkg: $currPkg\n")
-        } else {
-            s.append("Finding app...\n")
-        }
-
-        if (!prevApp.isNullOrEmpty() && prevDur != null && prevDur > 0) {
-            val m = prevDur / 60000
-            val s1 = (prevDur % 60000) / 1000
-            s.append("\nBefore: $prevApp\n")
-            s.append("Time: ${if (m > 0) "${m}m " else ""}${s1}s\n")
-        }
-
-        return s.toString()
     }
 
     private fun getAppLabel(pkg: String): String {
@@ -88,26 +91,72 @@ class AppUsageAccessibilityService : AccessibilityService() {
             val appInfo = pm.getApplicationInfo(pkg, 0)
             pm.getApplicationLabel(appInfo).toString()
         } catch (e: PackageManager.NameNotFoundException) {
-            pkg.split(".").lastOrNull()?.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
-                ?: pkg
+            pkg.split(".").lastOrNull()?.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() } ?: pkg
         }
+    }
+
+    private fun getAppIconBytes(pkg: String): ByteArray? {
+        return try {
+            val pm = applicationContext.packageManager
+            val drawable = pm.getApplicationIcon(pkg)
+            val bmp = drawableToBitmap(drawable)
+            if (bmp != null) {
+                val stream = java.io.ByteArrayOutputStream()
+                bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, stream)
+                stream.toByteArray()
+            } else null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun drawableToBitmap(drawable: android.graphics.drawable.Drawable): android.graphics.Bitmap? {
+        if (drawable is android.graphics.drawable.BitmapDrawable) {
+            return drawable.bitmap
+        }
+        val width = drawable.intrinsicWidth.takeIf { it > 0 } ?: 96
+        val height = drawable.intrinsicHeight.takeIf { it > 0 } ?: 96
+        val bitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+        drawable.setBounds(0, 0, canvas.width, canvas.height)
+        drawable.draw(canvas)
+        return bitmap
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        Log.d("AccessibilityService", "connected")
-
-        startTime = System.currentTimeMillis()
         h = Handler(mainLooper)
         h?.postDelayed(object : Runnable {
             override fun run() {
-                sendUpdate(currPkg, currApp, System.currentTimeMillis() - startTime)
-                h?.postDelayed(this, 5000)
+                checkForegroundApp()
+                sendAllUsageUpdate()
+                h?.postDelayed(this, 2000)
             }
-        }, 5000)
+        }, 2000)
     }
 
-    override fun onInterrupt() {
-        Log.d("AccessibilityService", "interrupted")
+    private fun checkForegroundApp() {
+        try {
+            val usm = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+            val now = System.currentTimeMillis()
+            val stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, now - 5000, now)
+            val top = stats?.maxByOrNull { it.lastTimeUsed }
+            val topPkg = top?.packageName ?: return
+            if (topPkg != currPkg && !shouldIgnorePackage(topPkg)) {
+                if (currPkg.isNotEmpty() && !shouldIgnorePackage(currPkg)) {
+                    val prev = appUsageMap.getOrPut(currPkg) {
+                        AppUsageInfo(currPkg, getAppLabel(currPkg), getAppIconBytes(currPkg), 0L)
+                    }
+                    prev.usageTime += now - startTime
+                }
+                currPkg = topPkg
+                startTime = now
+                appUsageMap.getOrPut(currPkg) {
+                    AppUsageInfo(currPkg, getAppLabel(currPkg), getAppIconBytes(currPkg), 0L)
+                }
+            }
+        } catch (_: Exception) {}
     }
+
+    override fun onInterrupt() {}
 }

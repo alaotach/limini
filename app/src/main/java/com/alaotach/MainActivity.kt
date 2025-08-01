@@ -15,20 +15,44 @@ import androidx.core.content.ContextCompat
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.view.accessibility.AccessibilityManager
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import androidx.recyclerview.widget.RecyclerView
 
 class MainActivity : AppCompatActivity() {
     private lateinit var usageView: TextView
     private lateinit var btnStart: Button
     private lateinit var btnStop: Button
     private lateinit var btnAccess: Button
+    private lateinit var usageListView: RecyclerView
     private var isReceiverOn = false
     private var isUsingAccess = false
+    private lateinit var usageAdapter: UsageAdapter
+
+    data class UsageItem(
+        val packageName: String,
+        val appName: String,
+        val icon: ByteArray?,
+        val usageTime: Long
+    )
 
     private val usageReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            val data = intent?.getStringExtra("usage") ?: ""
-            usageView.text = data
-            android.util.Log.d("AccessibilityService", data)
+            @Suppress("UNCHECKED_CAST", "DEPRECATION")
+            val usageList: ArrayList<HashMap<String, Any?>>? = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                intent?.getSerializableExtra("usageList", ArrayList::class.java) as? ArrayList<HashMap<String, Any?>>
+            } else {
+                intent?.getSerializableExtra("usageList") as? ArrayList<HashMap<String, Any?>>
+            }
+            if (usageList != null) {
+                val items = usageList.map {
+                    UsageItem(
+                        it["packageName"] as? String ?: "",
+                        it["appName"] as? String ?: "",
+                        it["icon"] as? ByteArray?,
+                        (it["usageTime"] as? Long) ?: 0L
+                    )
+                }
+                usageAdapter.submitList(items)
+            }
         }
     }
 
@@ -36,10 +60,15 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+
         usageView = findViewById(R.id.usageTextView)
         btnStart = findViewById(R.id.startButton)
         btnStop = findViewById(R.id.stopButton)
         btnAccess = findViewById(R.id.accessibilityButton)
+        usageListView = findViewById(R.id.usageRecyclerView)
+        usageAdapter = UsageAdapter()
+        usageListView.adapter = usageAdapter
+        usageListView.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
 
         checkPermissions()
 
@@ -122,6 +151,38 @@ class MainActivity : AppCompatActivity() {
                 IntentFilter("com.alaotach.limini.USAGE_UPDATE")
             )
             isReceiverOn = true
+        }
+    }
+
+    class UsageAdapter : androidx.recyclerview.widget.ListAdapter<UsageItem, UsageAdapter.UsageViewHolder>(object : androidx.recyclerview.widget.DiffUtil.ItemCallback<UsageItem>() {
+        override fun areItemsTheSame(oldItem: UsageItem, newItem: UsageItem) = oldItem.packageName == newItem.packageName
+        override fun areContentsTheSame(oldItem: UsageItem, newItem: UsageItem) = oldItem == newItem
+    }) {
+        class UsageViewHolder(val view: android.view.View) : androidx.recyclerview.widget.RecyclerView.ViewHolder(view) {
+            val iconView: ImageView = view.findViewById(R.id.appIcon)
+            val nameView: TextView = view.findViewById(R.id.appName)
+            val timeView: TextView = view.findViewById(R.id.usageTime)
+        }
+        override fun onCreateViewHolder(parent: android.view.ViewGroup, viewType: Int): UsageViewHolder {
+            val v = android.view.LayoutInflater.from(parent.context).inflate(R.layout.usage_item, parent, false)
+            return UsageViewHolder(v)
+        }
+        override fun onBindViewHolder(holder: UsageViewHolder, position: Int) {
+            val item = getItem(position)
+            if (item.icon != null) {
+                val bmp = android.graphics.BitmapFactory.decodeByteArray(item.icon, 0, item.icon.size)
+                holder.iconView.setImageBitmap(bmp)
+            } else {
+                holder.iconView.setImageResource(android.R.drawable.sym_def_app_icon)
+            }
+            holder.nameView.text = item.appName
+            holder.timeView.text = formatTime(item.usageTime)
+        }
+        private fun formatTime(ms: Long): String {
+            val s = ms / 1000
+            val m = s / 60
+            val s1 = s % 60
+            return if (m > 0) String.format("%dm %ds", m, s1) else String.format("%ds", s1)
         }
     }
 
