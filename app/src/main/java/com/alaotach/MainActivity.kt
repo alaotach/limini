@@ -44,14 +44,24 @@ class MainActivity : AppCompatActivity() {
             }
             if (usageList != null) {
                 val items = usageList.map {
-                    UsageItem(
-                        it["packageName"] as? String ?: "",
-                        it["appName"] as? String ?: "",
-                        it["icon"] as? ByteArray?,
-                        (it["usageTime"] as? Long) ?: 0L
-                    )
+                val iconRaw = it["icon"]
+                android.util.Log.d("UsageReceiver", "Processing ${it["appName"]}, iconRaw type: ${iconRaw?.javaClass?.simpleName}, value: ${if (iconRaw is ByteArray) "${iconRaw.size} bytes" else iconRaw}")
+                val iconBytes: ByteArray? = when (iconRaw) {
+                    is ByteArray -> iconRaw
+                    is ArrayList<*> -> {
+                        val intList = iconRaw.filterIsInstance<Int>()
+                        ByteArray(intList.size) { i -> intList[i].toByte() }
+                    }
+                    else -> null
                 }
-                usageAdapter.submitList(items)
+                UsageItem(
+                    it["packageName"] as? String ?: "",
+                    it["appName"] as? String ?: "",
+                    iconBytes,
+                    (it["usageTime"] as? Long) ?: 0L
+                )
+            }
+            usageAdapter.submitList(items)
             }
         }
     }
@@ -169,9 +179,18 @@ class MainActivity : AppCompatActivity() {
         }
         override fun onBindViewHolder(holder: UsageViewHolder, position: Int) {
             val item = getItem(position)
-            if (item.icon != null) {
-                val bmp = android.graphics.BitmapFactory.decodeByteArray(item.icon, 0, item.icon.size)
-                holder.iconView.setImageBitmap(bmp)
+            
+            if (item.icon != null && item.icon.isNotEmpty()) {
+                val bmp = try {
+                    android.graphics.BitmapFactory.decodeByteArray(item.icon, 0, item.icon.size)
+                } catch (e: Exception) {
+                    null
+                }
+                if (bmp != null) {
+                    holder.iconView.setImageBitmap(bmp)
+                } else {
+                    holder.iconView.setImageResource(android.R.drawable.sym_def_app_icon)
+                }
             } else {
                 holder.iconView.setImageResource(android.R.drawable.sym_def_app_icon)
             }
