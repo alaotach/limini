@@ -1,4 +1,4 @@
-package com.alaotach.limini.services
+﻿package com.alaotach.limini.services
 
 import android.accessibilityservice.AccessibilityService
 import android.view.accessibility.AccessibilityEvent
@@ -8,14 +8,13 @@ import android.util.Log
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.os.Handler
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.core.os.postDelayed
 import java.text.SimpleDateFormat
 import java.util.*
 
 class AppUsageAccessibilityService : AccessibilityService() {
     private val appUsageMap = mutableMapOf<String, AppUsageInfo>()
-    private val iconCache = mutableMapOf<String, ByteArray?>() // Icon cache to improve performance
+    private val iconCache = mutableMapOf<String, ByteArray?>()
     private var currPkg = ""
     private var startTime = 0L
     private var h: Handler? = null
@@ -31,7 +30,7 @@ class AppUsageAccessibilityService : AccessibilityService() {
         if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             val newPkg = event.packageName?.toString() ?: return
             val now = System.currentTimeMillis()
-            
+
             if (shouldIgnorePackage(newPkg)) {
                 if (currPkg.isNotEmpty() && !shouldIgnorePackage(currPkg)) {
                     val prev = appUsageMap.getOrPut(currPkg) {
@@ -44,14 +43,14 @@ class AppUsageAccessibilityService : AccessibilityService() {
                 }
                 return
             }
-            
+
             if (currPkg.isNotEmpty() && currPkg != newPkg && !shouldIgnorePackage(currPkg)) {
                 val prev = appUsageMap.getOrPut(currPkg) {
                     AppUsageInfo(currPkg, getAppLabel(currPkg), getAppIconBytes(currPkg), 0L)
                 }
                 prev.usageTime += now - startTime
             }
-            
+
             if (currPkg != newPkg) {
                 currPkg = newPkg
                 startTime = now
@@ -75,26 +74,41 @@ class AppUsageAccessibilityService : AccessibilityService() {
 
     private fun sendAllUsageUpdate() {
         val now = System.currentTimeMillis()
-        val usageList = appUsageMap.values.map { info ->
-            val session = if (info.packageName == currPkg) (now - startTime) else 0L
-            val hasIcon = info.iconRes != null && info.iconRes!!.isNotEmpty()
-            
-            // Log apps without icons for debugging
-            if (!hasIcon) {
-                Log.w("AppUsage", "No icon for app: ${info.appName} (${info.packageName})")
+        android.util.Log.d("AppUsageService", "Sending usage update")
+        val pm = applicationContext.packageManager
+        val allUserApps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+            .filter { appInfo ->
+                (appInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0 &&
+                pm.getLaunchIntentForPackage(appInfo.packageName) != null &&
+                !shouldIgnorePackage(appInfo.packageName)
             }
-            
+
+        android.util.Log.d("AppUsageService", "Found ${allUserApps.size} user apps")
+
+        val usageList = allUserApps.map { appInfo ->
+            val pkg = appInfo.packageName
+            val existingUsage = appUsageMap[pkg]
+            val session = if (pkg == currPkg) (now - startTime) else 0L
+            val totalUsage = (existingUsage?.usageTime ?: 0L) + session
+
+            val appName = existingUsage?.appName ?: getAppLabel(pkg)
+            val iconBytes = existingUsage?.iconRes ?: getAppIconBytes(pkg)
+
             mapOf(
-                "packageName" to info.packageName,
-                "appName" to info.appName,
-                "icon" to info.iconRes,
-                "usageTime" to info.usageTime + session
+                "packageName" to pkg,
+                "appName" to appName,
+                "icon" to iconBytes,
+                "usageTime" to totalUsage
             )
-        }.sortedByDescending { it["usageTime"] as Long }
-        
+        }
+        .sortedWith(compareByDescending<Map<String, Any?>> { (it["usageTime"] as Long) > 0 }
+            .thenByDescending { it["usageTime"] as Long }
+            .thenBy { it["appName"] as String })
+
         val i = Intent("com.alaotach.limini.USAGE_UPDATE")
         i.putExtra("usageList", ArrayList(usageList.map { HashMap(it) }))
-        LocalBroadcastManager.getInstance(this).sendBroadcast(i)
+        sendBroadcast(i)
+        android.util.Log.d("AppUsageService", "Broadcast sent with ${usageList.size} items")
     }
 
     private fun getAppLabel(pkg: String): String {
@@ -103,69 +117,58 @@ class AppUsageAccessibilityService : AccessibilityService() {
             val appInfo = pm.getApplicationInfo(pkg, 0)
             pm.getApplicationLabel(appInfo).toString()
         } catch (e: PackageManager.NameNotFoundException) {
-            pkg.split(".").lastOrNull()?.replaceFirstChar { 
-                if (it.isLowerCase()) it.titlecase() else it.toString() 
+            pkg.split(".").lastOrNull()?.replaceFirstChar {
+                if (it.isLowerCase()) it.titlecase() else it.toString()
             } ?: pkg
         }
     }
 
     private fun getAppIconBytes(pkg: String): ByteArray? {
-        // Check cache first
         if (iconCache.containsKey(pkg)) {
             return iconCache[pkg]
         }
-        
+
         val pm = applicationContext.packageManager
-        
+
         try {
-            // Method 1: Try to get the actual app icon (works best for popular apps)
             val appInfo = pm.getApplicationInfo(pkg, PackageManager.GET_META_DATA)
             val drawable = pm.getApplicationIcon(appInfo)
-            
-            // Handle different types of drawables
             val bitmap = when {
-                // Adaptive icons (Android 8.0+) - YouTube, Instagram, etc.
-                android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && 
+                android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
                 drawable is android.graphics.drawable.AdaptiveIconDrawable -> {
                     createBitmapFromAdaptiveIcon(drawable)
                 }
-                
-                // Vector drawables - many modern apps use these
+
                 drawable is android.graphics.drawable.VectorDrawable -> {
                     createBitmapFromVectorDrawable(drawable)
                 }
-                
-                // Layered drawables
+
                 drawable is android.graphics.drawable.LayerDrawable -> {
                     createBitmapFromLayerDrawable(drawable)
                 }
-                
-                // Standard bitmap drawables
+
                 drawable is android.graphics.drawable.BitmapDrawable -> {
                     val bmp = drawable.bitmap
                     if (bmp != null && !bmp.isRecycled) bmp else null
                 }
-                
-                // Generic drawable conversion
+
                 else -> {
                     createBitmapFromGenericDrawable(drawable)
                 }
             }
-            
+
             val iconBytes = bitmap?.let { bmp ->
                 if (!bmp.isRecycled) {
                     compressBitmapToBytes(bmp, pkg)
                 } else null
             }
-            
-            // Cache the result
+
             iconCache[pkg] = iconBytes
             return iconBytes
-            
+
         } catch (e: Exception) {
             Log.e("AppUsage", "Failed to get icon for $pkg: ${e.message}")
-            
-            // Fallback: Try launcher intent method
+
             val fallbackIcon = tryLauncherIconFallback(pkg, pm)
             iconCache[pkg] = fallbackIcon
             return fallbackIcon
@@ -174,14 +177,13 @@ class AppUsageAccessibilityService : AccessibilityService() {
 
     private fun createBitmapFromAdaptiveIcon(adaptiveIcon: android.graphics.drawable.AdaptiveIconDrawable): android.graphics.Bitmap? {
         return try {
-            val size = 108 // Standard size for adaptive icons
+            val size = 108
             val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
             val canvas = android.graphics.Canvas(bitmap)
-            
-            // Set bounds and draw
+
             adaptiveIcon.setBounds(0, 0, size, size)
             adaptiveIcon.draw(canvas)
-            
+
             bitmap
         } catch (e: Exception) {
             Log.e("AppUsage", "Error creating bitmap from adaptive icon: ${e.message}")
@@ -191,13 +193,13 @@ class AppUsageAccessibilityService : AccessibilityService() {
 
     private fun createBitmapFromVectorDrawable(vectorDrawable: android.graphics.drawable.VectorDrawable): android.graphics.Bitmap? {
         return try {
-            val size = 96 // Good size for vector drawables
+            val size = 96
             val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
             val canvas = android.graphics.Canvas(bitmap)
-            
+
             vectorDrawable.setBounds(0, 0, size, size)
             vectorDrawable.draw(canvas)
-            
+
             bitmap
         } catch (e: Exception) {
             Log.e("AppUsage", "Error creating bitmap from vector drawable: ${e.message}")
@@ -210,10 +212,10 @@ class AppUsageAccessibilityService : AccessibilityService() {
             val size = 96
             val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
             val canvas = android.graphics.Canvas(bitmap)
-            
+
             layerDrawable.setBounds(0, 0, size, size)
             layerDrawable.draw(canvas)
-            
+
             bitmap
         } catch (e: Exception) {
             Log.e("AppUsage", "Error creating bitmap from layer drawable: ${e.message}")
@@ -225,17 +227,16 @@ class AppUsageAccessibilityService : AccessibilityService() {
         return try {
             val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 96
             val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 96
-            
-            // Limit size to prevent memory issues
+
             val finalWidth = minOf(width, 192)
             val finalHeight = minOf(height, 192)
-            
+
             val bitmap = android.graphics.Bitmap.createBitmap(finalWidth, finalHeight, android.graphics.Bitmap.Config.ARGB_8888)
             val canvas = android.graphics.Canvas(bitmap)
-            
+
             drawable.setBounds(0, 0, finalWidth, finalHeight)
             drawable.draw(canvas)
-            
+
             bitmap
         } catch (e: Exception) {
             Log.e("AppUsage", "Error creating bitmap from generic drawable: ${e.message}")
@@ -245,7 +246,6 @@ class AppUsageAccessibilityService : AccessibilityService() {
 
     private fun tryLauncherIconFallback(pkg: String, pm: PackageManager): ByteArray? {
         return try {
-            // Method 1: Launch intent
             val launchIntent = pm.getLaunchIntentForPackage(pkg)
             if (launchIntent != null) {
                 val resolveInfo = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
@@ -254,38 +254,36 @@ class AppUsageAccessibilityService : AccessibilityService() {
                     @Suppress("DEPRECATION")
                     pm.resolveActivity(launchIntent, 0)
                 }
-                
+
                 resolveInfo?.let { info ->
                     val drawable = info.loadIcon(pm)
                     val bitmap = createBitmapFromGenericDrawable(drawable)
                     return bitmap?.let { compressBitmapToBytes(it, pkg) }
                 }
             }
-            
-            // Method 2: Query main activities
+
             val intent = Intent(Intent.ACTION_MAIN).apply {
                 addCategory(Intent.CATEGORY_LAUNCHER)
                 setPackage(pkg)
             }
-            
+
             val activities = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
                 pm.queryIntentActivities(intent, PackageManager.ResolveInfoFlags.of(0))
             } else {
                 @Suppress("DEPRECATION")
                 pm.queryIntentActivities(intent, 0)
             }
-            
+
             if (activities.isNotEmpty()) {
                 val drawable = activities[0].loadIcon(pm)
                 val bitmap = createBitmapFromGenericDrawable(drawable)
                 return bitmap?.let { compressBitmapToBytes(it, pkg) }
             }
-            
-            // Final fallback: default icon
+
             val defaultDrawable = pm.defaultActivityIcon
             val bitmap = createBitmapFromGenericDrawable(defaultDrawable)
             return bitmap?.let { compressBitmapToBytes(it, pkg) }
-            
+
         } catch (e: Exception) {
             Log.e("AppUsage", "Fallback icon method failed for $pkg: ${e.message}")
             null
@@ -295,10 +293,9 @@ class AppUsageAccessibilityService : AccessibilityService() {
     private fun compressBitmapToBytes(bitmap: android.graphics.Bitmap, pkg: String): ByteArray? {
         return try {
             val stream = java.io.ByteArrayOutputStream()
-            
-            // Use PNG for better quality with transparency support
+
             val success = bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 90, stream)
-            
+
             if (success) {
                 val bytes = stream.toByteArray()
                 Log.d("AppUsage", "Successfully compressed icon for $pkg, size: ${bytes.size} bytes")
@@ -313,30 +310,15 @@ class AppUsageAccessibilityService : AccessibilityService() {
         }
     }
 
-    // Debug method for troubleshooting specific apps
-    private fun debugIconForApp(pkg: String) {
-        val pm = applicationContext.packageManager
-        
-        try {
-            val appInfo = pm.getApplicationInfo(pkg, PackageManager.GET_META_DATA)
-            val drawable = pm.getApplicationIcon(appInfo)
-            
-            Log.d("AppUsage", "=== DEBUG INFO FOR $pkg ===")
-            Log.d("AppUsage", "Drawable type: ${drawable.javaClass.simpleName}")
-            Log.d("AppUsage", "Intrinsic size: ${drawable.intrinsicWidth} x ${drawable.intrinsicHeight}")
-            Log.d("AppUsage", "Is adaptive: ${drawable is android.graphics.drawable.AdaptiveIconDrawable}")
-            Log.d("AppUsage", "Is vector: ${drawable is android.graphics.drawable.VectorDrawable}")
-            Log.d("AppUsage", "Is bitmap: ${drawable is android.graphics.drawable.BitmapDrawable}")
-            Log.d("AppUsage", "Is layer: ${drawable is android.graphics.drawable.LayerDrawable}")
-            
-        } catch (e: Exception) {
-            Log.e("AppUsage", "Debug failed for $pkg: ${e.message}")
-        }
-    }
-
     override fun onServiceConnected() {
         super.onServiceConnected()
+        android.util.Log.d("AppUsageService", "Accessibility service connected")
         h = Handler(mainLooper)
+
+        Thread {
+            preloadUserAppIcons()
+        }.start()
+
         h?.postDelayed(object : Runnable {
             override fun run() {
                 checkForegroundApp()
@@ -346,6 +328,30 @@ class AppUsageAccessibilityService : AccessibilityService() {
         }, 2000)
     }
 
+    private fun preloadUserAppIcons() {
+        try {
+            val pm = applicationContext.packageManager
+            val userApps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+                .filter { appInfo ->
+                    (appInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0 &&
+                    pm.getLaunchIntentForPackage(appInfo.packageName) != null &&
+                    !shouldIgnorePackage(appInfo.packageName)
+                }
+
+            Log.d("AppUsage", "Preloading icons for ${userApps.size} user apps")
+
+            for (appInfo in userApps) {
+                if (!iconCache.containsKey(appInfo.packageName)) {
+                    getAppIconBytes(appInfo.packageName)
+                }
+            }
+
+            Log.d("AppUsage", "Icon preloading complete")
+        } catch (e: Exception) {
+            Log.e("AppUsage", "Error preloading icons: ${e.message}")
+        }
+    }
+
     private fun checkForegroundApp() {
         try {
             val usm = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
@@ -353,7 +359,7 @@ class AppUsageAccessibilityService : AccessibilityService() {
             val stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, now - 5000, now)
             val top = stats?.maxByOrNull { it.lastTimeUsed }
             val topPkg = top?.packageName ?: return
-            
+
             if (topPkg != currPkg && !shouldIgnorePackage(topPkg)) {
                 if (currPkg.isNotEmpty() && !shouldIgnorePackage(currPkg)) {
                     val prev = appUsageMap.getOrPut(currPkg) {
@@ -372,13 +378,11 @@ class AppUsageAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         super.onDestroy()
-        // Clear cache to prevent memory leaks
         iconCache.clear()
         h?.removeCallbacksAndMessages(null)
     }
 
     override fun onInterrupt() {
-        // Clear handler callbacks when service is interrupted
         h?.removeCallbacksAndMessages(null)
     }
 }

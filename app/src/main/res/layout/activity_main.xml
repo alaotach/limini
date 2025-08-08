@@ -4,13 +4,30 @@
     android:layout_height="match_parent"
     android:padding="16dp">
 
-
     <TextView
         android:id="@+id/usageTextView"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Waiting for usage data..."
-        android:textSize="16sp"/>
+        android:text="App usage tracking with individual time limits"
+        android:textSize="16sp"
+        android:textStyle="bold"/>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Set individual time limits for each app using the controls below"
+        android:textSize="12sp"
+        android:textColor="@android:color/darker_gray"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="8dp"/>
+
+    <Button
+        android:id="@+id/showAllButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Show All Apps"
+        android:layout_marginBottom="8dp"
+        android:backgroundTint="@color/teal_200"/>
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/usageRecyclerView"
@@ -36,4 +53,32 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Enable Accessibility Service"/>
+    
+    <Button
+        android:id="@+id/testDataButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Load Test Data"
+        android:backgroundTint="@android:color/holo_orange_light"/>
+    
+    <Button
+        android:id="@+id/testBroadcastButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Send Test Broadcast"
+        android:backgroundTint="@android:color/holo_blue_light"/>
+    
+    <Button
+        android:id="@+id/loadRealAppsButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Load Real Apps"
+        android:backgroundTint="@android:color/holo_green_light"/>
+    
+    <Button
+        android:id="@+id/testOverlayButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Test Overlay"
+        android:backgroundTint="@android:color/holo_red_light"/>
 </LinearLayout>

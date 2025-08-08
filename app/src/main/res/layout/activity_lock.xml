@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:background="#E53E3E"
+    android:padding="32dp">
+
+    <!-- Warning Icon -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="⏰"
+        android:textSize="80sp"
+        android:layout_marginBottom="24dp" />
+
+    <!-- Title -->
+    <TextView
+        android:id="@+id/lockTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Time Limit Reached"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF"
+        android:gravity="center"
+        android:layout_marginBottom="16dp" />
+
+    <!-- Message -->
+    <TextView
+        android:id="@+id/lockMessage"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="App has exceeded the time limit.\n\nTake a break and come back later!"
+        android:textSize="18sp"
+        android:textColor="#FFFFFF"
+        android:gravity="center"
+        android:lineSpacingMultiplier="1.3"
+        android:layout_marginBottom="48dp" />
+
+    <!-- Buttons Container -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center">
+
+        <!-- Back to Home Button -->
+        <Button
+            android:id="@+id/backToHomeButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🏠 Back to Home"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:backgroundTint="#FFFFFF"
+            android:textColor="#E53E3E"
+            android:layout_marginBottom="16dp"
+            android:padding="16dp" />
+
+        <!-- Open Limini Button -->
+        <Button
+            android:id="@+id/openLiminiButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="⚙️ Open Limini Settings"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:backgroundTint="#2D3748"
+            android:textColor="#FFFFFF"
+            android:padding="16dp" />
+
+    </LinearLayout>
+
+    <!-- Bottom Text -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Digital wellbeing is important for your health"
+        android:textSize="14sp"
+        android:textColor="#FFFFFF"
+        android:alpha="0.8"
+        android:gravity="center"
+        android:layout_marginTop="32dp" />
+
+</LinearLayout>

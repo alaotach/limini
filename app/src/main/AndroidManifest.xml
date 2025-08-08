@@ -8,6 +8,7 @@
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"/>
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     
     <application
         android:allowBackup="true"
@@ -31,10 +32,23 @@
             </intent-filter>
         </activity>
         
+        <activity
+            android:name=".LockActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Limini"
+            android:launchMode="singleTop"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:finishOnTaskLaunch="false" />
+        
         <service
             android:name=".services.AppUsage"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+            
+        <service
+            android:name=".services.OverlayService"
+            android:exported="false" />
             
         <service
             android:name=".services.AppUsageAccessibilityService"
