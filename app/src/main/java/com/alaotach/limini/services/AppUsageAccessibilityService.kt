@@ -18,6 +18,8 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import android.content.pm.ServiceInfo
 import android.content.SharedPreferences
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
 
 class AppUsageAccessibilityService : AccessibilityService() {
     private val appUsageMap = mutableMapOf<String, AppUsageInfo>()
@@ -25,6 +27,21 @@ class AppUsageAccessibilityService : AccessibilityService() {
     private var currPkg = ""
     private var startTime = 0L
     private var h: Handler? = null
+    private val activeOverlays = mutableSetOf<String>()
+    
+    private val overlayDismissReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                "com.alaotach.limini.OVERLAY_DISMISSED" -> {
+                    val packageName = intent.getStringExtra("packageName")
+                    if (packageName != null) {
+                        activeOverlays.remove(packageName)
+                        Log.d(TAG, "🗑️ Cleared overlay flag for $packageName")
+                    }
+                }
+            }
+        }
+    }
     
     companion object {
         private const val TAG = "AppUsageService"
@@ -64,6 +81,9 @@ class AppUsageAccessibilityService : AccessibilityService() {
                 if (currPkg != newPkg) {
                     currPkg = newPkg
                     startTime = now
+                    
+                    // Clear overlay flag when switching to different app
+                    activeOverlays.clear()
                     
                     // Initialize app info if needed
                     if (!appUsageMap.containsKey(currPkg)) {
@@ -165,6 +185,12 @@ class AppUsageAccessibilityService : AccessibilityService() {
         try {
             if (currPkg.isEmpty()) return
             
+            // Check if overlay is already active for this app
+            if (activeOverlays.contains(currPkg)) {
+                Log.d(TAG, "🚫 Overlay already active for $currPkg - skipping")
+                return
+            }
+            
             val totalUsage = getTotalUsageTime(currPkg)
             val timeLimitPrefs = getSharedPreferences("time_limits", Context.MODE_PRIVATE)
             val timeLimitMinutes = timeLimitPrefs.getInt(currPkg, Int.MAX_VALUE)
@@ -174,6 +200,9 @@ class AppUsageAccessibilityService : AccessibilityService() {
                 
                 if (totalUsage >= timeLimitMs) {
                     Log.d(TAG, "⚠️ Time limit exceeded for $currPkg: ${totalUsage}ms >= ${timeLimitMs}ms")
+                    
+                    // Mark overlay as active to prevent repeated triggers
+                    activeOverlays.add(currPkg)
                     
                     val appName = getAppLabel(currPkg)
                     val overlayIntent = Intent(this, com.alaotach.limini.services.OverlayService::class.java).apply {
@@ -285,6 +314,14 @@ class AppUsageAccessibilityService : AccessibilityService() {
         Log.d(TAG, "🚀 Accessibility service connected!")
         
         try {
+            // Register overlay dismiss receiver
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                Context.RECEIVER_NOT_EXPORTED
+            } else {
+                0
+            }
+            registerReceiver(overlayDismissReceiver, IntentFilter("com.alaotach.limini.OVERLAY_DISMISSED"), flags)
+            
             // Create notification channel
             createNotificationChannel()
             
@@ -398,6 +435,13 @@ class AppUsageAccessibilityService : AccessibilityService() {
         try {
             super.onDestroy()
             
+            // Unregister receiver
+            try {
+                unregisterReceiver(overlayDismissReceiver)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error unregistering overlay dismiss receiver: ${e.message}")
+            }
+            
             // Clear notification
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.cancel(1)
@@ -406,6 +450,7 @@ class AppUsageAccessibilityService : AccessibilityService() {
             h = null
             appUsageMap.clear()
             iconCache.clear()
+            activeOverlays.clear()
         } catch (e: Exception) {
             Log.e(TAG, "Error during destroy: ${e.message}")
         }
