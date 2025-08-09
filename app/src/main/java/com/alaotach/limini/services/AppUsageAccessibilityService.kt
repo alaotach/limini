@@ -8,9 +8,16 @@ import android.util.Log
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.os.Handler
+import android.os.Looper
 import androidx.core.os.postDelayed
 import java.text.SimpleDateFormat
 import java.util.*
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.os.Build
+import androidx.core.app.NotificationCompat
+import android.content.pm.ServiceInfo
+import android.content.SharedPreferences
 
 class AppUsageAccessibilityService : AccessibilityService() {
     private val appUsageMap = mutableMapOf<String, AppUsageInfo>()
@@ -18,6 +25,10 @@ class AppUsageAccessibilityService : AccessibilityService() {
     private var currPkg = ""
     private var startTime = 0L
     private var h: Handler? = null
+    
+    companion object {
+        private const val TAG = "AppUsageService"
+    }
 
     data class AppUsageInfo(
         val packageName: String,
@@ -27,88 +38,233 @@ class AppUsageAccessibilityService : AccessibilityService() {
     )
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            val newPkg = event.packageName?.toString() ?: return
-            val now = System.currentTimeMillis()
+        try {
+            if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+                val newPkg = event.packageName?.toString()
+                if (newPkg.isNullOrBlank()) return
+                
+                val now = System.currentTimeMillis()
+                Log.d(TAG, "🔄 Window state changed: $newPkg")
 
-            if (shouldIgnorePackage(newPkg)) {
-                if (currPkg.isNotEmpty() && !shouldIgnorePackage(currPkg)) {
-                    val prev = appUsageMap.getOrPut(currPkg) {
-                        AppUsageInfo(currPkg, getAppLabel(currPkg), getAppIconBytes(currPkg), 0L)
+                if (shouldIgnorePackage(newPkg)) {
+                    Log.d(TAG, "⏭️ Ignoring package: $newPkg")
+                    stopCurrentSession(now)
+                    return
+                }
+
+                // Stop previous session if different app
+                if (currPkg.isNotEmpty() && currPkg != newPkg && !shouldIgnorePackage(currPkg)) {
+                    val sessionTime = now - startTime
+                    if (sessionTime > 0) {
+                        Log.d(TAG, "📊 $currPkg session: ${sessionTime}ms (not saving - using system stats)")
                     }
-                    prev.usageTime += now - startTime
-                    currPkg = ""
-                    startTime = 0L
-                    sendAllUsageUpdate()
                 }
-                return
-            }
 
-            if (currPkg.isNotEmpty() && currPkg != newPkg && !shouldIgnorePackage(currPkg)) {
-                val prev = appUsageMap.getOrPut(currPkg) {
-                    AppUsageInfo(currPkg, getAppLabel(currPkg), getAppIconBytes(currPkg), 0L)
+                // Start new session
+                if (currPkg != newPkg) {
+                    currPkg = newPkg
+                    startTime = now
+                    
+                    // Initialize app info if needed
+                    if (!appUsageMap.containsKey(currPkg)) {
+                        appUsageMap[currPkg] = AppUsageInfo(
+                            currPkg, 
+                            getAppLabel(currPkg), 
+                            null, // Don't load icons initially to avoid crashes
+                            0L
+                        )
+                    }
+                    
+                    Log.d(TAG, "▶️ Started tracking: $currPkg (stored: ${getStoredUsageTime(currPkg)}ms)")
+                    sendUsageUpdate()
                 }
-                prev.usageTime += now - startTime
             }
-
-            if (currPkg != newPkg) {
-                currPkg = newPkg
-                startTime = now
-                appUsageMap.getOrPut(currPkg) {
-                    AppUsageInfo(currPkg, getAppLabel(currPkg), getAppIconBytes(currPkg), 0L)
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error in onAccessibilityEvent: ${e.message}", e)
+        }
+    }
+    
+    private fun stopCurrentSession(now: Long) {
+        if (currPkg.isNotEmpty() && !shouldIgnorePackage(currPkg)) {
+            val sessionTime = now - startTime
+            if (sessionTime > 0) {
+                Log.d(TAG, "⏹️ Stopped $currPkg, session time: ${sessionTime}ms (not saving - using system stats)")
+            }
+            currPkg = ""
+            startTime = 0L
+            sendUsageUpdate()
+        }
+    }
+    
+    private fun updateAppUsage(packageName: String, sessionTime: Long) {
+        try {
+            val usageInfo = appUsageMap.getOrPut(packageName) {
+                AppUsageInfo(packageName, getAppLabel(packageName), null, 0L)
+            }
+            usageInfo.usageTime += sessionTime
+        } catch (e: Exception) {
+            Log.e(TAG, "Error updating app usage for $packageName: ${e.message}")
+        }
+    }
+    
+    private fun getStoredUsageTime(packageName: String): Long {
+        return try {
+            // Use Android's built-in usage statistics as the base
+            getSystemUsageTime(packageName)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting stored usage for $packageName: ${e.message}")
+            0L
+        }
+    }
+    
+    private fun getSystemUsageTime(packageName: String): Long {
+        return try {
+            val usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+            val now = System.currentTimeMillis()
+            val startOfDay = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }.timeInMillis
+            
+            val usageStats = usageStatsManager.queryUsageStats(
+                UsageStatsManager.INTERVAL_DAILY,
+                startOfDay,
+                now
+            )
+            
+            val appUsage = usageStats?.find { it.packageName == packageName }
+            val totalTime = appUsage?.totalTimeInForeground ?: 0L
+            
+            Log.d(TAG, "📊 System usage for $packageName: ${totalTime}ms (${formatTime(totalTime)})")
+            totalTime
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting system usage for $packageName: ${e.message}")
+            0L
+        }
+    }
+    
+    private fun getTotalUsageTime(packageName: String): Long {
+        val storedTime = getStoredUsageTime(packageName)
+        val currentSessionTime = if (packageName == currPkg && startTime > 0) {
+            System.currentTimeMillis() - startTime
+        } else {
+            0L
+        }
+        val total = storedTime + currentSessionTime
+        
+        if (packageName == currPkg) {
+            Log.d(TAG, "⏱️ Usage calc for $packageName: stored=${storedTime}ms + session=${currentSessionTime}ms = ${total}ms")
+        }
+        
+        return total
+    }
+    
+    private fun checkTimeLimit() {
+        try {
+            if (currPkg.isEmpty()) return
+            
+            val totalUsage = getTotalUsageTime(currPkg)
+            val timeLimitPrefs = getSharedPreferences("time_limits", Context.MODE_PRIVATE)
+            val timeLimitMinutes = timeLimitPrefs.getInt(currPkg, Int.MAX_VALUE)
+            
+            if (timeLimitMinutes != Int.MAX_VALUE) {
+                val timeLimitMs = timeLimitMinutes * 60 * 1000L
+                
+                if (totalUsage >= timeLimitMs) {
+                    Log.d(TAG, "⚠️ Time limit exceeded for $currPkg: ${totalUsage}ms >= ${timeLimitMs}ms")
+                    
+                    val appName = getAppLabel(currPkg)
+                    val overlayIntent = Intent(this, com.alaotach.limini.services.OverlayService::class.java).apply {
+                        putExtra("appName", appName)
+                        putExtra("timeLimitMinutes", timeLimitMinutes)
+                        putExtra("blockedPackageName", currPkg)
+                    }
+                    startService(overlayIntent)
+                } else {
+                    val remainingMs = timeLimitMs - totalUsage
+                    val remainingMinutes = remainingMs / (60 * 1000)
+                    Log.d(TAG, "⏱️ $currPkg within limit: ${remainingMinutes}m remaining")
                 }
-                sendAllUsageUpdate()
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking time limit: ${e.message}")
         }
     }
 
     private fun shouldIgnorePackage(pkg: String): Boolean {
         val ignorePkgs = setOf(
-            "android", "com.android.systemui", "com.google.android.googlequicksearchbox",
-            "com.android.launcher", "com.android.launcher3", "com.miui.home", "com.huawei.android.launcher",
-            "com.sec.android.app.launcher", "com.oppo.launcher", "com.vivo.launcher", "com.coloros.launcher",
-            "com.samsung.android.app.launcher", "com.lge.launcher2", "com.htc.launcher", "com.zui.launcher"
+            packageName, // Ignore Limini itself
+            "android", 
+            "com.android.systemui", 
+            "com.google.android.googlequicksearchbox",
+            "com.android.launcher", 
+            "com.android.launcher3", 
+            "com.miui.home", 
+            "com.huawei.android.launcher",
+            "com.sec.android.app.launcher", 
+            "com.oppo.launcher", 
+            "com.vivo.launcher", 
+            "com.coloros.launcher",
+            "com.samsung.android.app.launcher", 
+            "com.lge.launcher2", 
+            "com.htc.launcher", 
+            "com.zui.launcher"
         )
         return pkg in ignorePkgs || pkg.startsWith("com.android.inputmethod") || pkg.isBlank()
     }
 
-    private fun sendAllUsageUpdate() {
-        val now = System.currentTimeMillis()
-        android.util.Log.d("AppUsageService", "Sending usage update")
-        val pm = applicationContext.packageManager
-        val allUserApps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
-            .filter { appInfo ->
-                (appInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0 &&
-                pm.getLaunchIntentForPackage(appInfo.packageName) != null &&
-                !shouldIgnorePackage(appInfo.packageName)
+    private fun sendUsageUpdate() {
+        try {
+            val now = System.currentTimeMillis()
+            Log.d(TAG, "📡 Sending usage update")
+            
+            val pm = applicationContext.packageManager
+            val allUserApps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+                .filter { appInfo ->
+                    try {
+                        (appInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0 &&
+                        pm.getLaunchIntentForPackage(appInfo.packageName) != null &&
+                        !shouldIgnorePackage(appInfo.packageName)
+                    } catch (e: Exception) {
+                        false
+                    }
+                }
+
+            Log.d(TAG, "📱 Found ${allUserApps.size} user apps")
+
+            val usageList = allUserApps.mapNotNull { appInfo ->
+                try {
+                    val pkg = appInfo.packageName
+                    val totalUsage = getTotalUsageTime(pkg)
+                    val appName = getAppLabel(pkg)
+
+                    mapOf(
+                        "packageName" to pkg,
+                        "appName" to appName,
+                        "icon" to null as ByteArray?, // Don't send icons for now
+                        "usageTime" to totalUsage
+                    )
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error processing app ${appInfo.packageName}: ${e.message}")
+                    null
+                }
             }
-
-        android.util.Log.d("AppUsageService", "Found ${allUserApps.size} user apps")
-
-        val usageList = allUserApps.map { appInfo ->
-            val pkg = appInfo.packageName
-            val existingUsage = appUsageMap[pkg]
-            val session = if (pkg == currPkg) (now - startTime) else 0L
-            val totalUsage = (existingUsage?.usageTime ?: 0L) + session
-
-            val appName = existingUsage?.appName ?: getAppLabel(pkg)
-            val iconBytes = existingUsage?.iconRes ?: getAppIconBytes(pkg)
-
-            mapOf(
-                "packageName" to pkg,
-                "appName" to appName,
-                "icon" to iconBytes,
-                "usageTime" to totalUsage
+            .sortedWith(
+                compareByDescending<Map<String, Any?>> { (it["usageTime"] as Long) > 0 }
+                .thenByDescending { it["usageTime"] as Long }
+                .thenBy { it["appName"] as String }
             )
-        }
-        .sortedWith(compareByDescending<Map<String, Any?>> { (it["usageTime"] as Long) > 0 }
-            .thenByDescending { it["usageTime"] as Long }
-            .thenBy { it["appName"] as String })
 
-        val i = Intent("com.alaotach.limini.USAGE_UPDATE")
-        i.putExtra("usageList", ArrayList(usageList.map { HashMap(it) }))
-        sendBroadcast(i)
-        android.util.Log.d("AppUsageService", "Broadcast sent with ${usageList.size} items")
+            val intent = Intent("com.alaotach.limini.USAGE_UPDATE")
+            intent.putExtra("usageList", ArrayList(usageList.map { HashMap(it) }))
+            sendBroadcast(intent)
+            
+            Log.d(TAG, "✅ Broadcast sent with ${usageList.size} items")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error sending usage update: ${e.message}", e)
+        }
     }
 
     private fun getAppLabel(pkg: String): String {
@@ -116,273 +272,142 @@ class AppUsageAccessibilityService : AccessibilityService() {
             val pm = applicationContext.packageManager
             val appInfo = pm.getApplicationInfo(pkg, 0)
             pm.getApplicationLabel(appInfo).toString()
-        } catch (e: PackageManager.NameNotFoundException) {
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting app label for $pkg: ${e.message}")
             pkg.split(".").lastOrNull()?.replaceFirstChar {
                 if (it.isLowerCase()) it.titlecase() else it.toString()
             } ?: pkg
         }
     }
 
-    private fun getAppIconBytes(pkg: String): ByteArray? {
-        if (iconCache.containsKey(pkg)) {
-            return iconCache[pkg]
-        }
-
-        val pm = applicationContext.packageManager
-
-        try {
-            val appInfo = pm.getApplicationInfo(pkg, PackageManager.GET_META_DATA)
-            val drawable = pm.getApplicationIcon(appInfo)
-            val bitmap = when {
-                android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
-                drawable is android.graphics.drawable.AdaptiveIconDrawable -> {
-                    createBitmapFromAdaptiveIcon(drawable)
-                }
-
-                drawable is android.graphics.drawable.VectorDrawable -> {
-                    createBitmapFromVectorDrawable(drawable)
-                }
-
-                drawable is android.graphics.drawable.LayerDrawable -> {
-                    createBitmapFromLayerDrawable(drawable)
-                }
-
-                drawable is android.graphics.drawable.BitmapDrawable -> {
-                    val bmp = drawable.bitmap
-                    if (bmp != null && !bmp.isRecycled) bmp else null
-                }
-
-                else -> {
-                    createBitmapFromGenericDrawable(drawable)
-                }
-            }
-
-            val iconBytes = bitmap?.let { bmp ->
-                if (!bmp.isRecycled) {
-                    compressBitmapToBytes(bmp, pkg)
-                } else null
-            }
-
-            iconCache[pkg] = iconBytes
-            return iconBytes
-
-        } catch (e: Exception) {
-            Log.e("AppUsage", "Failed to get icon for $pkg: ${e.message}")
-
-            val fallbackIcon = tryLauncherIconFallback(pkg, pm)
-            iconCache[pkg] = fallbackIcon
-            return fallbackIcon
-        }
-    }
-
-    private fun createBitmapFromAdaptiveIcon(adaptiveIcon: android.graphics.drawable.AdaptiveIconDrawable): android.graphics.Bitmap? {
-        return try {
-            val size = 108
-            val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
-            val canvas = android.graphics.Canvas(bitmap)
-
-            adaptiveIcon.setBounds(0, 0, size, size)
-            adaptiveIcon.draw(canvas)
-
-            bitmap
-        } catch (e: Exception) {
-            Log.e("AppUsage", "Error creating bitmap from adaptive icon: ${e.message}")
-            null
-        }
-    }
-
-    private fun createBitmapFromVectorDrawable(vectorDrawable: android.graphics.drawable.VectorDrawable): android.graphics.Bitmap? {
-        return try {
-            val size = 96
-            val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
-            val canvas = android.graphics.Canvas(bitmap)
-
-            vectorDrawable.setBounds(0, 0, size, size)
-            vectorDrawable.draw(canvas)
-
-            bitmap
-        } catch (e: Exception) {
-            Log.e("AppUsage", "Error creating bitmap from vector drawable: ${e.message}")
-            null
-        }
-    }
-
-    private fun createBitmapFromLayerDrawable(layerDrawable: android.graphics.drawable.LayerDrawable): android.graphics.Bitmap? {
-        return try {
-            val size = 96
-            val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
-            val canvas = android.graphics.Canvas(bitmap)
-
-            layerDrawable.setBounds(0, 0, size, size)
-            layerDrawable.draw(canvas)
-
-            bitmap
-        } catch (e: Exception) {
-            Log.e("AppUsage", "Error creating bitmap from layer drawable: ${e.message}")
-            null
-        }
-    }
-
-    private fun createBitmapFromGenericDrawable(drawable: android.graphics.drawable.Drawable): android.graphics.Bitmap? {
-        return try {
-            val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 96
-            val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 96
-
-            val finalWidth = minOf(width, 192)
-            val finalHeight = minOf(height, 192)
-
-            val bitmap = android.graphics.Bitmap.createBitmap(finalWidth, finalHeight, android.graphics.Bitmap.Config.ARGB_8888)
-            val canvas = android.graphics.Canvas(bitmap)
-
-            drawable.setBounds(0, 0, finalWidth, finalHeight)
-            drawable.draw(canvas)
-
-            bitmap
-        } catch (e: Exception) {
-            Log.e("AppUsage", "Error creating bitmap from generic drawable: ${e.message}")
-            null
-        }
-    }
-
-    private fun tryLauncherIconFallback(pkg: String, pm: PackageManager): ByteArray? {
-        return try {
-            val launchIntent = pm.getLaunchIntentForPackage(pkg)
-            if (launchIntent != null) {
-                val resolveInfo = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                    pm.resolveActivity(launchIntent, PackageManager.ResolveInfoFlags.of(0))
-                } else {
-                    @Suppress("DEPRECATION")
-                    pm.resolveActivity(launchIntent, 0)
-                }
-
-                resolveInfo?.let { info ->
-                    val drawable = info.loadIcon(pm)
-                    val bitmap = createBitmapFromGenericDrawable(drawable)
-                    return bitmap?.let { compressBitmapToBytes(it, pkg) }
-                }
-            }
-
-            val intent = Intent(Intent.ACTION_MAIN).apply {
-                addCategory(Intent.CATEGORY_LAUNCHER)
-                setPackage(pkg)
-            }
-
-            val activities = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                pm.queryIntentActivities(intent, PackageManager.ResolveInfoFlags.of(0))
-            } else {
-                @Suppress("DEPRECATION")
-                pm.queryIntentActivities(intent, 0)
-            }
-
-            if (activities.isNotEmpty()) {
-                val drawable = activities[0].loadIcon(pm)
-                val bitmap = createBitmapFromGenericDrawable(drawable)
-                return bitmap?.let { compressBitmapToBytes(it, pkg) }
-            }
-
-            val defaultDrawable = pm.defaultActivityIcon
-            val bitmap = createBitmapFromGenericDrawable(defaultDrawable)
-            return bitmap?.let { compressBitmapToBytes(it, pkg) }
-
-        } catch (e: Exception) {
-            Log.e("AppUsage", "Fallback icon method failed for $pkg: ${e.message}")
-            null
-        }
-    }
-
-    private fun compressBitmapToBytes(bitmap: android.graphics.Bitmap, pkg: String): ByteArray? {
-        return try {
-            val stream = java.io.ByteArrayOutputStream()
-
-            val success = bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 90, stream)
-
-            if (success) {
-                val bytes = stream.toByteArray()
-                Log.d("AppUsage", "Successfully compressed icon for $pkg, size: ${bytes.size} bytes")
-                bytes
-            } else {
-                Log.w("AppUsage", "Failed to compress bitmap for $pkg")
-                null
-            }
-        } catch (e: Exception) {
-            Log.e("AppUsage", "Error compressing bitmap for $pkg: ${e.message}")
-            null
-        }
-    }
-
     override fun onServiceConnected() {
         super.onServiceConnected()
-        android.util.Log.d("AppUsageService", "Accessibility service connected")
-        h = Handler(mainLooper)
-
-        Thread {
-            preloadUserAppIcons()
-        }.start()
-
-        h?.postDelayed(object : Runnable {
-            override fun run() {
-                checkForegroundApp()
-                sendAllUsageUpdate()
-                h?.postDelayed(this, 2000)
-            }
-        }, 2000)
-    }
-
-    private fun preloadUserAppIcons() {
+        Log.d(TAG, "🚀 Accessibility service connected!")
+        
         try {
-            val pm = applicationContext.packageManager
-            val userApps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
-                .filter { appInfo ->
-                    (appInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0 &&
-                    pm.getLaunchIntentForPackage(appInfo.packageName) != null &&
-                    !shouldIgnorePackage(appInfo.packageName)
+            // Create notification channel
+            createNotificationChannel()
+            
+            h = Handler(Looper.getMainLooper())
+
+            // Start periodic checks every 3 seconds
+            h?.postDelayed(object : Runnable {
+                override fun run() {
+                    try {
+                        sendUsageUpdate()
+                        updateNotification() // Update notification with current app
+                        checkTimeLimit() // Check if current app exceeds time limit
+                        h?.postDelayed(this, 3000)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error in periodic update: ${e.message}")
+                        h?.postDelayed(this, 3000) // Continue despite errors
+                    }
                 }
-
-            Log.d("AppUsage", "Preloading icons for ${userApps.size} user apps")
-
-            for (appInfo in userApps) {
-                if (!iconCache.containsKey(appInfo.packageName)) {
-                    getAppIconBytes(appInfo.packageName)
-                }
-            }
-
-            Log.d("AppUsage", "Icon preloading complete")
+            }, 3000)
+            
+            Log.d(TAG, "✅ Accessibility service setup complete")
         } catch (e: Exception) {
-            Log.e("AppUsage", "Error preloading icons: ${e.message}")
+            Log.e(TAG, "❌ Error setting up accessibility service: ${e.message}", e)
         }
     }
 
-    private fun checkForegroundApp() {
+    private fun createNotificationChannel() {
         try {
-            val usm = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-            val now = System.currentTimeMillis()
-            val stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, now - 5000, now)
-            val top = stats?.maxByOrNull { it.lastTimeUsed }
-            val topPkg = top?.packageName ?: return
-
-            if (topPkg != currPkg && !shouldIgnorePackage(topPkg)) {
-                if (currPkg.isNotEmpty() && !shouldIgnorePackage(currPkg)) {
-                    val prev = appUsageMap.getOrPut(currPkg) {
-                        AppUsageInfo(currPkg, getAppLabel(currPkg), getAppIconBytes(currPkg), 0L)
-                    }
-                    prev.usageTime += now - startTime
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(
+                    "usage_channel",
+                    "App Usage Tracker",
+                    NotificationManager.IMPORTANCE_LOW
+                ).apply {
+                    description = "Shows current app usage information"
+                    setShowBadge(false)
                 }
-                currPkg = topPkg
-                startTime = now
-                appUsageMap.getOrPut(currPkg) {
-                    AppUsageInfo(currPkg, getAppLabel(currPkg), getAppIconBytes(currPkg), 0L)
-                }
+                
+                val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                notificationManager.createNotificationChannel(channel)
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.e(TAG, "Error creating notification channel: ${e.message}")
+        }
     }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        iconCache.clear()
-        h?.removeCallbacksAndMessages(null)
+    
+    private fun updateNotification() {
+        try {
+            if (currPkg.isEmpty()) return
+            
+            val appName = getAppLabel(currPkg)
+            val totalTime = getTotalUsageTime(currPkg)
+            val usageText = formatTime(totalTime)
+            
+            // Check if app has time limit
+            val prefs = getSharedPreferences("time_limits", Context.MODE_PRIVATE)
+            val timeLimitMinutes = prefs.getInt(currPkg, Int.MAX_VALUE)
+            
+            Log.d(TAG, "📱 Notification update: $currPkg, Total: ${totalTime}ms, Limit: ${timeLimitMinutes}min")
+            
+            val contentTitle = "Current: $appName"
+            val contentText = if (timeLimitMinutes != Int.MAX_VALUE) {
+                val limitMs = timeLimitMinutes * 60 * 1000L
+                if (totalTime >= limitMs) {
+                    "⚠️ LIMIT EXCEEDED: $usageText / ${timeLimitMinutes}m"
+                } else {
+                    "Usage: $usageText / ${timeLimitMinutes}m limit"
+                }
+            } else {
+                "Usage: $usageText (no limit)"
+            }
+            
+            val notification = NotificationCompat.Builder(this, "usage_channel")
+                .setContentTitle(contentTitle)
+                .setContentText(contentText)
+                .setSmallIcon(android.R.drawable.ic_menu_info_details)
+                .setOngoing(true)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .build()
+            
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.notify(1, notification)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error updating notification: ${e.message}")
+        }
+    }
+    
+    private fun formatTime(ms: Long): String {
+        val seconds = ms / 1000
+        val minutes = seconds / 60
+        val remainingSeconds = seconds % 60
+        return if (minutes > 0) {
+            "${minutes}m ${remainingSeconds}s"
+        } else {
+            "${remainingSeconds}s"
+        }
     }
 
     override fun onInterrupt() {
-        h?.removeCallbacksAndMessages(null)
+        Log.w(TAG, "⚠️ Accessibility Service Interrupted")
+        try {
+            h?.removeCallbacksAndMessages(null)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during interrupt: ${e.message}")
+        }
+    }
+
+    override fun onDestroy() {
+        Log.d(TAG, "🔄 Accessibility service destroyed")
+        try {
+            super.onDestroy()
+            
+            // Clear notification
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.cancel(1)
+            
+            h?.removeCallbacksAndMessages(null)
+            h = null
+            appUsageMap.clear()
+            iconCache.clear()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during destroy: ${e.message}")
+        }
     }
 }

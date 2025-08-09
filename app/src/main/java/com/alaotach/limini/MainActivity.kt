@@ -153,22 +153,18 @@ class MainActivity : AppCompatActivity() {
                 usageView.text = "tracking..."
                 Toast.makeText(this, "Started with accessibility service", Toast.LENGTH_SHORT).show()
                 android.util.Log.d("MainActivity", "Using accessibility service")
-            } else if (permissionManager.hasUsagePermission() && permissionManager.hasNotifPermission()) {
-                isUsingAccess = false
-                try {
-                    startForegroundService(Intent(this, AppUsage::class.java))
-                    registerUsageReceiver()
-                    usageView.text = "started"
-                } catch (e: Exception) {
-                    Toast.makeText(this, "Failed to start service: ${e.message}", Toast.LENGTH_LONG).show()
-                }
             } else {
-                permissionManager.checkAllPermissions()
+                // OLD SERVICE DISABLED - Using only AccessibilityService now
+                android.util.Log.d("MainActivity", "Please enable Accessibility Service")
+                Toast.makeText(this, "Please enable the Accessibility Service for app tracking", Toast.LENGTH_LONG).show()
+                // Redirect to accessibility settings
+                val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                startActivity(intent)
             }
         }
 
         btnStop.setOnClickListener {
-            if (!isUsingAccess) stopService(Intent(this, AppUsage::class.java))
+            // OLD SERVICE DISABLED - Only using AccessibilityService now
             unregisterUsageReceiver()
             usageView.text = "stopped"
         }
@@ -563,27 +559,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startTrackingService() {
-        android.util.Log.d("MainActivity", "Attempting to start tracking service")
-
-        if (!permissionManager.hasUsagePermission()) {
-            android.util.Log.w("MainActivity", "Cannot start tracking service - no usage permission")
-            return
-        }
-
-        if (!permissionManager.hasNotifPermission()) {
-            android.util.Log.w("MainActivity", "Cannot start tracking service - no notification permission")
-            return
-        }
-
-        try {
-            val serviceIntent = Intent(this, AppUsage::class.java)
-            startForegroundService(serviceIntent)
-            registerUsageReceiver()
-            android.util.Log.d("MainActivity", "Tracking service started automatically")
-        } catch (e: Exception) {
-            android.util.Log.e("MainActivity", "Failed to start tracking service: ${e.message}", e)
-            Toast.makeText(this, "Failed to start tracking service", Toast.LENGTH_SHORT).show()
-        }
+        android.util.Log.d("MainActivity", "OLD SERVICE DISABLED - Only using AccessibilityService now")
+        // OLD SERVICE DISABLED - Only using AccessibilityService now
+        // The AccessibilityService starts automatically when enabled
     }
 
     private fun testOverlay() {
