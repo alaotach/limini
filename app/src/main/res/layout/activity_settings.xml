@@ -1,0 +1,544 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F5F5F5">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- Header -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/teal_700"
+            android:padding="16dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:elevation="4dp">
+
+            <ImageButton
+                android:id="@+id/backButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:src="@android:drawable/ic_menu_revert"
+                android:tint="#FFFFFF"
+                android:contentDescription="Back" />
+
+            <TextView
+                android:id="@+id/titleText"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Question Categories &amp; Settings"
+                android:textColor="#FFFFFF"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:layout_marginStart="16dp" />
+
+        </LinearLayout>
+
+        <!-- Reflection Questions Card -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/reflectionCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_margin="16dp"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="2dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="🤔 Reflection Questions"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:textColor="#333333" />
+
+                    <Switch
+                        android:id="@+id/enableReflectionSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Choose what types of reflection questions to show"
+                    android:textSize="14sp"
+                    android:textColor="#666666"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="16dp" />
+
+                <!-- Before App Questions -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Before Opening Apps:"
+                    android:textStyle="bold"
+                    android:textSize="16sp"
+                    android:textColor="#444444"
+                    android:layout_marginBottom="8dp" />
+
+                <RadioGroup
+                    android:id="@+id/beforeAppGroup"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp">
+
+                    <RadioButton
+                        android:id="@+id/beforeAppBasic"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Basic - 'Do you really need this app right now?'"
+                        android:textSize="14sp" />
+
+                    <RadioButton
+                        android:id="@+id/beforeAppDeep"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Deep - 'What are you hoping to achieve?'"
+                        android:textSize="14sp" />
+
+                    <RadioButton
+                        android:id="@+id/beforeAppCustom"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Custom - 'How will this align with your goals?'"
+                        android:textSize="14sp" />
+
+                </RadioGroup>
+
+                <!-- During Break Questions -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="During Break Time:"
+                    android:textStyle="bold"
+                    android:textSize="16sp"
+                    android:textColor="#444444"
+                    android:layout_marginBottom="8dp" />
+
+                <RadioGroup
+                    android:id="@+id/duringBreakGroup"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp">
+
+                    <RadioButton
+                        android:id="@+id/duringBreakMotivational"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Motivational - 'What positive activity could you do?'"
+                        android:textSize="14sp" />
+
+                    <RadioButton
+                        android:id="@+id/duringBreakMindful"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Mindful - 'How are you feeling right now?'"
+                        android:textSize="14sp" />
+
+                    <RadioButton
+                        android:id="@+id/duringBreakProductive"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Productive - 'What important task could you work on?'"
+                        android:textSize="14sp" />
+
+                </RadioGroup>
+
+                <!-- Daily Reflection Questions -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Daily Reflection:"
+                    android:textStyle="bold"
+                    android:textSize="16sp"
+                    android:textColor="#444444"
+                    android:layout_marginBottom="8dp" />
+
+                <RadioGroup
+                    android:id="@+id/dailyReflectionGroup"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+
+                    <RadioButton
+                        android:id="@+id/dailyReflectionSimple"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Simple - 'How was your screen time today?'"
+                        android:textSize="14sp" />
+
+                    <RadioButton
+                        android:id="@+id/dailyReflectionDetailed"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Detailed - 'Which apps served you well today?'"
+                        android:textSize="14sp" />
+
+                    <RadioButton
+                        android:id="@+id/dailyReflectionGoalFocused"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Goal-Focused - 'Did your phone use support your goals?'"
+                        android:textSize="14sp" />
+
+                </RadioGroup>
+
+            </LinearLayout>
+
+        </androidx.cardview.widget.CardView>
+
+        <!-- Notification Settings Card -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/notificationCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="16dp"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="2dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="🔔 Smart Notifications"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:textColor="#333333" />
+
+                    <Switch
+                        android:id="@+id/enableNotificationsSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Configure when and how you receive notifications"
+                    android:textSize="14sp"
+                    android:textColor="#666666"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="16dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Reminder Frequency:"
+                    android:textStyle="bold"
+                    android:textSize="16sp"
+                    android:textColor="#444444"
+                    android:layout_marginBottom="8dp" />
+
+                <Spinner
+                    android:id="@+id/reminderFrequencySpinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Encouragement Messages"
+                        android:textSize="16sp"
+                        android:textColor="#444444" />
+
+                    <Switch
+                        android:id="@+id/encouragementSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="8dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Usage Warning Alerts"
+                        android:textSize="16sp"
+                        android:textColor="#444444" />
+
+                    <Switch
+                        android:id="@+id/warningSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+        </androidx.cardview.widget.CardView>
+
+        <!-- Break Activities Card -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/breakCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="16dp"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="2dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="🌟 Break Activity Suggestions"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:textColor="#333333" />
+
+                    <Switch
+                        android:id="@+id/enableBreakSuggestionsSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Choose which break activities to suggest during time limits"
+                    android:textSize="14sp"
+                    android:textColor="#666666"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="16dp" />
+
+                <CheckBox
+                    android:id="@+id/physicalActivityCheck"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="🏃 Physical Activity (walks, exercises)"
+                    android:textSize="16sp" />
+
+                <CheckBox
+                    android:id="@+id/breathingExerciseCheck"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="🧘 Breathing Exercises &amp; Meditation"
+                    android:textSize="16sp" />
+
+                <CheckBox
+                    android:id="@+id/readingCheck"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="📚 Reading &amp; Learning"
+                    android:textSize="16sp" />
+
+                <CheckBox
+                    android:id="@+id/socialConnectionCheck"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="👥 Social Connection (calls, visits)"
+                    android:textSize="16sp" />
+
+                <CheckBox
+                    android:id="@+id/creativeActivityCheck"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="🎨 Creative Activities (art, music, writing)"
+                    android:textSize="16sp" />
+
+                <CheckBox
+                    android:id="@+id/outdoorActivityCheck"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="🌳 Outdoor Activities (nature, fresh air)"
+                    android:textSize="16sp" />
+
+            </LinearLayout>
+
+        </androidx.cardview.widget.CardView>
+
+        <!-- Insights & Reports Card -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/insightsCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="16dp"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="2dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="📊 Insights &amp; Reports"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:textColor="#333333"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Choose what insights and reports you'd like to receive"
+                    android:textSize="14sp"
+                    android:textColor="#666666"
+                    android:layout_marginBottom="16dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Weekly Usage Reports"
+                        android:textSize="16sp"
+                        android:textColor="#444444" />
+
+                    <Switch
+                        android:id="@+id/weeklyReportSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="8dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Usage Pattern Analysis"
+                        android:textSize="16sp"
+                        android:textColor="#444444" />
+
+                    <Switch
+                        android:id="@+id/usagePatternAnalysisSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="8dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Goal Progress Tracking"
+                        android:textSize="16sp"
+                        android:textColor="#444444" />
+
+                    <Switch
+                        android:id="@+id/goalProgressTrackingSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="8dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="App Category Insights"
+                        android:textSize="16sp"
+                        android:textColor="#444444" />
+
+                    <Switch
+                        android:id="@+id/appCategoryInsightsSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+        </androidx.cardview.widget.CardView>
+
+        <!-- Bottom padding -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="24dp" />
+
+    </LinearLayout>
+
+</ScrollView>

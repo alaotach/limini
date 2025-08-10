@@ -41,6 +41,12 @@
             android:excludeFromRecents="true"
             android:taskAffinity=""
             android:finishOnTaskLaunch="false" />
+            
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Limini"
+            android:parentActivityName=".MainActivity" />
         
         <service
             android:name=".services.AppUsage"
@@ -53,6 +59,14 @@
             android:foregroundServiceType="specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                       android:value="App blocking overlay service" />
+        </service>
+        
+        <service
+            android:name=".services.QuestionOverlayService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                      android:value="Question challenge overlay service" />
         </service>
             
         <service

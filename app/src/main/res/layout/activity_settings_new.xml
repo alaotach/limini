@@ -1,0 +1,232 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F5F5F5">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- Header -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/teal_700"
+            android:padding="16dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:elevation="4dp">
+
+            <ImageButton
+                android:id="@+id/backButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="@android:drawable/ic_menu_revert"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:tint="@android:color/white"
+                android:contentDescription="Back" />
+
+            <TextView
+                android:id="@+id/titleText"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Question Settings"
+                android:textColor="@android:color/white"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:layout_marginStart="16dp" />
+
+        </LinearLayout>
+
+        <!-- Question Categories Card -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/questionCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_margin="16dp"
+            android:elevation="2dp"
+            app:cardCornerRadius="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="🧠 Challenge Questions"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Enable questions to extend app usage beyond time limits. Answer correctly and provide a good reason to get 5 extra minutes."
+                    android:textSize="14sp"
+                    android:textColor="@android:color/darker_gray"
+                    android:layout_marginBottom="16dp" />
+
+                <Switch
+                    android:id="@+id/enableQuestionsSwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Enable Question Challenges"
+                    android:textSize="16sp"
+                    android:layout_marginBottom="16dp" />
+
+                <!-- Category Selection -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Select Question Categories:"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="12dp" />
+
+                <LinearLayout
+                    android:id="@+id/categoryContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+            </LinearLayout>
+
+        </androidx.cardview.widget.CardView>
+
+        <!-- AI Validation Card -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/aiCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="16dp"
+            android:layout_marginBottom="16dp"
+            android:elevation="2dp"
+            app:cardCornerRadius="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="🤖 AI Validation"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="AI validates your reasons for extending app usage. Generic responses like 'I want to use it' will be rejected."
+                    android:textSize="14sp"
+                    android:textColor="@android:color/darker_gray"
+                    android:layout_marginBottom="16dp" />
+
+                <Switch
+                    android:id="@+id/enableAIValidationSwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Enable AI Validation"
+                    android:textSize="16sp"
+                    android:layout_marginBottom="16dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Strictness Level:"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <Spinner
+                    android:id="@+id/aiStrictnessSpinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="• Lenient: Accepts most thoughtful responses\n• Moderate: Requires good reasoning\n• Strict: Only accepts compelling reasons"
+                    android:textSize="12sp"
+                    android:textColor="@android:color/darker_gray" />
+
+            </LinearLayout>
+
+        </androidx.cardview.widget.CardView>
+
+        <!-- Notification Settings Card -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/notificationCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="16dp"
+            android:layout_marginBottom="16dp"
+            android:elevation="2dp"
+            app:cardCornerRadius="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="🔔 Notifications"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <Switch
+                    android:id="@+id/enableNotificationsSwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Enable Notifications"
+                    android:textSize="16sp"
+                    android:layout_marginBottom="16dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Usage Reminders:"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <Spinner
+                    android:id="@+id/reminderFrequencySpinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp" />
+
+                <Switch
+                    android:id="@+id/encouragementSwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Encouragement Messages"
+                    android:textSize="16sp" />
+
+            </LinearLayout>
+
+        </androidx.cardview.widget.CardView>
+
+        <!-- Bottom padding -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="32dp" />
+
+    </LinearLayout>
+
+</ScrollView>

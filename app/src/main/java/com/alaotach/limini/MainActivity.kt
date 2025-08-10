@@ -29,6 +29,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var usageRecyclerView: RecyclerView
     private lateinit var startButton: Button
     private lateinit var stopButton: Button
+    private lateinit var settingsButton: ImageButton
     
     private lateinit var permissionManager: PermissionManager
     private lateinit var timeLimitManager: TimeLimitManager
@@ -82,6 +83,7 @@ class MainActivity : AppCompatActivity() {
         usageRecyclerView = findViewById(R.id.usageRecyclerView)
         startButton = findViewById(R.id.startButton)
         stopButton = findViewById(R.id.stopButton)
+        settingsButton = findViewById(R.id.settingsButton)
         
         // Setup RecyclerView
         usageAdapter = IndividualUsageAdapter { packageName, minutes ->
@@ -107,6 +109,12 @@ class MainActivity : AppCompatActivity() {
         
         stopButton.setOnClickListener {
             stopMonitoring()
+        }
+        
+        settingsButton.setOnClickListener {
+            Log.d("MainActivity", "Settings button clicked")
+            val intent = Intent(this, SettingsActivity::class.java)
+            startActivity(intent)
         }
     }
     
@@ -150,7 +158,7 @@ class MainActivity : AppCompatActivity() {
         if (hasUsage && hasNotif && hasOverlay && hasAccessibility) {
             // All permissions granted
             permissionCard.visibility = android.view.View.GONE
-            statusTextView.text = "\eady to Monitor"
+            statusTextView.text = "ready to Monitor"
             usageTextView.text = "All permissions granted. You can now start monitoring your app usage."
         } else {
             // Some permissions missing

@@ -1,0 +1,213 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#E53E3E"
+    android:padding="24dp"
+    android:gravity="center">
+
+    <!-- Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="16dp">
+        
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="⏰"
+            android:textSize="32sp"
+            android:layout_marginEnd="8dp" />
+            
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Time Limit Reached"
+            android:textColor="@android:color/white"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+            
+        <TextView
+            android:id="@+id/categoryBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🌍 GK"
+            android:textColor="@android:color/white"
+            android:background="#AA000000"
+            android:padding="4dp"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <!-- App Info -->
+    <TextView
+        android:id="@+id/appNameText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="App Name"
+        android:textColor="@android:color/white"
+        android:textSize="16sp"
+        android:gravity="center"
+        android:layout_marginBottom="16dp" />
+
+    <!-- Challenge Card -->
+    <androidx.cardview.widget.CardView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        app:cardBackgroundColor="@android:color/white"
+        app:cardCornerRadius="12dp"
+        app:cardElevation="4dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <!-- Question -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Answer this question to extend your time:"
+                android:textColor="@color/teal_700"
+                android:textStyle="bold"
+                android:textSize="14sp"
+                android:layout_marginBottom="12dp" />
+
+            <TextView
+                android:id="@+id/questionText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="What is the capital of France?"
+                android:textColor="@android:color/black"
+                android:textSize="16sp"
+                android:layout_marginBottom="16dp"
+                android:lineSpacingMultiplier="1.2" />
+
+            <!-- Answer Options -->
+            <RadioGroup
+                android:id="@+id/answerOptions"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp">
+
+                <RadioButton
+                    android:id="@+id/option1"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Option 1"
+                    android:textSize="14sp"
+                    android:padding="8dp" />
+
+                <RadioButton
+                    android:id="@+id/option2"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Option 2"
+                    android:textSize="14sp"
+                    android:padding="8dp" />
+
+                <RadioButton
+                    android:id="@+id/option3"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="8dp"
+                    android:text="Option 3"
+                    android:textSize="14sp" />
+
+                <RadioButton
+                    android:id="@+id/option4"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Option 4"
+                    android:textSize="14sp"
+                    android:padding="8dp" />
+
+            </RadioGroup>
+
+            <!-- Reason Input -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Why do you want to continue using this app?"
+                android:textColor="@color/teal_700"
+                android:textStyle="bold"
+                android:textSize="14sp"
+                android:layout_marginBottom="8dp" />
+
+            <EditText
+                android:id="@+id/reasonInput"
+                android:layout_width="match_parent"
+                android:layout_height="80dp"
+                android:background="@android:drawable/edit_text"
+                android:padding="12dp"
+                android:hint="Provide a thoughtful reason..."
+                android:gravity="top|start"
+                android:inputType="textMultiLine|textCapSentences"
+                android:maxLength="200"
+                android:layout_marginBottom="16dp" />
+
+            <!-- Submit Button -->
+            <Button
+                android:id="@+id/submitAnswer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Submit Answer"
+                android:backgroundTint="@color/teal_700"
+                android:textColor="@android:color/white"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp" />
+
+        </LinearLayout>
+
+    </androidx.cardview.widget.CardView>
+
+    <!-- Bottom Actions -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center">
+
+        <Button
+            android:id="@+id/skipButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Skip (Go Home)"
+            android:backgroundTint="@android:color/darker_gray"
+            android:textColor="@android:color/white"
+            android:layout_marginEnd="8dp"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/settingsButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Change Questions"
+            android:backgroundTint="#AA000000"
+            android:textColor="@android:color/white"
+            android:layout_marginStart="8dp"
+            android:textSize="12sp" />
+
+    </LinearLayout>
+
+    <!-- Loading/Result Message -->
+    <TextView
+        android:id="@+id/statusMessage"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textColor="@android:color/white"
+        android:textSize="14sp"
+        android:gravity="center"
+        android:layout_marginTop="16dp"
+        android:visibility="gone" />
+
+</LinearLayout>
