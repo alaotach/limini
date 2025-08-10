@@ -154,17 +154,14 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "Started with accessibility service", Toast.LENGTH_SHORT).show()
                 android.util.Log.d("MainActivity", "Using accessibility service")
             } else {
-                // OLD SERVICE DISABLED - Using only AccessibilityService now
                 android.util.Log.d("MainActivity", "Please enable Accessibility Service")
                 Toast.makeText(this, "Please enable the Accessibility Service for app tracking", Toast.LENGTH_LONG).show()
-                // Redirect to accessibility settings
                 val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
                 startActivity(intent)
             }
         }
 
         btnStop.setOnClickListener {
-            // OLD SERVICE DISABLED - Only using AccessibilityService now
             unregisterUsageReceiver()
             usageView.text = "stopped"
         }
@@ -560,8 +557,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun startTrackingService() {
         android.util.Log.d("MainActivity", "OLD SERVICE DISABLED - Only using AccessibilityService now")
-        // OLD SERVICE DISABLED - Only using AccessibilityService now
-        // The AccessibilityService starts automatically when enabled
     }
 
     private fun testOverlay() {

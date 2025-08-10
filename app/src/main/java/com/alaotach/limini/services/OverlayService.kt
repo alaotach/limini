@@ -1,5 +1,8 @@
 package com.alaotach.limini.services
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
 import android.content.IntentFilter
@@ -8,6 +11,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.*
 import android.widget.Button
 import android.widget.TextView
@@ -16,7 +20,9 @@ import android.content.Context
 import android.content.BroadcastReceiver
 import android.app.ActivityManager
 import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import android.content.ComponentName
+import androidx.core.app.NotificationCompat
 import com.alaotach.limini.MainActivity
 import com.alaotach.limini.R
 
@@ -37,19 +43,19 @@ class OverlayService : Service() {
     
     private val dismissReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            when (intent?.action) {
-                "com.alaotach.limini.DISMISS_OVERLAY" -> {
-                    android.util.Log.d("OverlayService", "📡 Received manual dismiss broadcast")
-                    userDismissed = true
-                    cleanupAndStop()
-                }
-            }
+            cleanupAndStop()
         }
+    }
+
+    companion object {
+        private const val TAG = "OverlayService"
+        private const val NOTIFICATION_CHANNEL_ID = "overlay_channel"
+        private const val NOTIFICATION_ID = 2
     }
 
     override fun onCreate() {
         super.onCreate()
-        android.util.Log.d("OverlayService", "🚀 Overlay service created")
+        createNotificationChannel()
         val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             Context.RECEIVER_NOT_EXPORTED
         } else {
@@ -60,7 +66,6 @@ class OverlayService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (isOverlayShowing) {
-            android.util.Log.d("OverlayService", "🔒 Overlay already showing - ignoring duplicate start command")
             return START_NOT_STICKY
         }
 
@@ -69,54 +74,76 @@ class OverlayService : Service() {
         blockedPackageName = intent?.getStringExtra("blockedPackageName")
         userDismissed = false
 
-        android.util.Log.d("OverlayService", "🔒 Creating overlay for $appName (blocked: $blockedPackageName)")
+        if (blockedPackageName == null) {
+            cleanupAndStop()
+            return START_NOT_STICKY
+        }
+
+        Log.d(TAG, "🔒 Creating overlay for $appName (blocked: $blockedPackageName)")
+
+        val notification = createNotification(appName)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
 
         showOverlay(appName, timeLimitMinutes)
-        startMonitoringCurrentApp()
 
         return START_NOT_STICKY
     }
 
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                "Limini",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Notification by Limini"
+            }
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun createNotification(appName: String): Notification {
+        return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+            .setContentTitle("App Blocked")
+            .setContentText("Time limit reached for $appName.")
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+    }
+
     private fun showOverlay(appName: String, timeLimitMinutes: Int) {
         if (isOverlayShowing || isServiceDestroying) {
-            android.util.Log.d("OverlayService", "🔒 Overlay already showing or service destroying - skipping")
             return
         }
 
         try {
+            isOverlayShowing = true
             windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
             overlayView = LayoutInflater.from(this).inflate(R.layout.activity_lock, null)
             
-            overlayView?.findViewById<TextView>(R.id.lockTitle)?.text = "⏰ Time Limit Reached"
-            overlayView?.findViewById<TextView>(R.id.lockMessage)?.text =
-                "$appName has exceeded the $timeLimitMinutes minute limit.\n\nTake a break and come back later!"
-            
-            overlayView?.findViewById<Button>(R.id.backToHomeButton)?.setOnClickListener {
-                android.util.Log.d("OverlayService", "🏠 Go Home button clicked - user dismissed")
-                userDismissed = true
-                try {
-                    goHome()
-                    cleanupAndStop()
-                } catch (e: Exception) {
-                    android.util.Log.e("OverlayService", "Error going home: ${e.message}")
-                    cleanupAndStop()
-                }
+            val titleView = overlayView?.findViewById<TextView>(R.id.lockTitle)
+            val messageView = overlayView?.findViewById<TextView>(R.id.lockMessage)
+            val homeButton = overlayView?.findViewById<Button>(R.id.backToHomeButton)
+            val liminiButton = overlayView?.findViewById<Button>(R.id.openLiminiButton)
+
+            titleView?.text = "Time's Up!"
+            messageView?.text = "limit exceeded ${timeLimitMinutes} mins for $appName."
+
+            homeButton?.setOnClickListener {
+                goHome()
+                cleanupAndStop()
             }
 
-            // Limini button click handler
-            overlayView?.findViewById<Button>(R.id.openLiminiButton)?.setOnClickListener {
-                android.util.Log.d("OverlayService", "📱 Open Limini button clicked - user dismissed")
-                userDismissed = true
-                try {
-                    openLimini()
-                    cleanupAndStop()
-                } catch (e: Exception) {
-                    android.util.Log.e("OverlayService", "Error opening Limini: ${e.message}")
-                    cleanupAndStop()
-                }
+            liminiButton?.setOnClickListener {
+                openLimini()
+                cleanupAndStop()
             }
 
-            // Set up window layout parameters - IMPROVED FLAGS
             val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             } else {
@@ -128,165 +155,69 @@ class OverlayService : Service() {
                 WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.MATCH_PARENT,
                 layoutFlag,
-                // FIXED: Removed conflicting flags that cause flickering
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
-                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
                 WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
-                // Removed FLAG_FULLSCREEN as it can cause conflicts
                 PixelFormat.TRANSLUCENT
             )
-            params.gravity = Gravity.TOP or Gravity.START
-            params.x = 0
-            params.y = 0
+            params.gravity = Gravity.CENTER
 
             windowManager?.addView(overlayView, params)
-            isOverlayShowing = true
             overlayStartTime = System.currentTimeMillis()
-
-            android.util.Log.d("OverlayService", "🔒 Overlay shown successfully")
-
-            // Enable touch after a short delay with better error handling
-            overlayView?.postDelayed({
-                try {
-                    if (!isServiceDestroying && overlayView != null && windowManager != null) {
-                        params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
-                        windowManager?.updateViewLayout(overlayView, params)
-                        android.util.Log.d("OverlayService", "✅ Overlay touch enabled")
-                    }
-                } catch (e: Exception) {
-                    android.util.Log.e("OverlayService", "Error enabling touch: ${e.message}")
-                }
-            }, 500) // Increased delay for better stability
-
+            startMonitoringCurrentApp()
         } catch (e: Exception) {
-            android.util.Log.e("OverlayService", "❌ Error creating overlay: ${e.message}", e)
+            Log.e(TAG, "Err: ${e.message}", e)
             isOverlayShowing = false
-            fallbackToActivity(appName, timeLimitMinutes)
+            cleanupAndStop()
         }
     }
 
     private fun startMonitoringCurrentApp() {
         if (blockedPackageName.isNullOrEmpty() || isServiceDestroying) {
-            android.util.Log.d("OverlayService", "No blocked package or service destroying, skipping monitoring")
             return
         }
 
         checkRunnable = object : Runnable {
             override fun run() {
                 if (isServiceDestroying || userDismissed) {
-                    android.util.Log.d("OverlayService", "Service destroying or user dismissed, stopping monitoring")
                     return
                 }
 
                 try {
                     val currentApp = getCurrentForegroundApp()
-                    val overlayAge = System.currentTimeMillis() - overlayStartTime
-
-                    // Auto-dismiss after 3 minutes for safety (increased from 2)
-                    if (overlayAge > 180000) {
-                        android.util.Log.d("OverlayService", "⏰ Overlay timeout after ${overlayAge}ms - auto-dismissing")
-                        cleanupAndStop()
-                        return
+                    if (currentApp == blockedPackageName) {
                     }
-
-                    android.util.Log.d("OverlayService", "🔍 Current app: '$currentApp', Blocked: '$blockedPackageName', Stable: $stableAppDetections")
-
-                    val shouldDismiss = when {
-                        currentApp == "HOME_SCREEN" -> {
-                            consecutiveHomeDetections++
-                            stableAppDetections = 0 // Reset stable counter
-                            // INCREASED threshold for more stability
-                            if (consecutiveHomeDetections >= 5) {
-                                android.util.Log.d("OverlayService", "🏠 HOME_SCREEN confirmed ($consecutiveHomeDetections detections) - dismissing")
-                                true
-                            } else {
-                                android.util.Log.d("OverlayService", "🏠 HOME_SCREEN detected (${consecutiveHomeDetections}/5) - waiting for confirmation")
-                                false
-                            }
-                        }
-                        currentApp != null && 
-                        currentApp != blockedPackageName && 
-                        currentApp != "com.alaotach.limini" -> {
-                            // NEW: Require stable detection of new app
-                            if (currentApp == lastDetectedApp) {
-                                stableAppDetections++
-                            } else {
-                                stableAppDetections = 1
-                            }
-                            consecutiveHomeDetections = 0
-                            
-                            // Require 3 stable detections of the same non-blocked app
-                            if (stableAppDetections >= 3) {
-                                android.util.Log.d("OverlayService", "🔄 App switch to '$currentApp' confirmed ($stableAppDetections detections) - dismissing")
-                                true
-                            } else {
-                                android.util.Log.d("OverlayService", "🔄 App switch to '$currentApp' (${stableAppDetections}/3) - waiting for confirmation")
-                                false
-                            }
-                        }
-                        else -> {
-                            // Reset counters if we're back to blocked app or in limbo
-                            if (currentApp == blockedPackageName) {
-                                consecutiveHomeDetections = 0
-                                stableAppDetections = 0
-                                android.util.Log.d("OverlayService", "⏰ Still in blocked app '$currentApp' - overlay remains")
-                            } else if (currentApp == "com.alaotach.limini") {
-                                // Don't change counters for Limini
-                                android.util.Log.d("OverlayService", "📱 Limini detected - maintaining current state")
-                            }
-                            false
-                        }
-                    }
-
-                    lastDetectedApp = currentApp
-
-                    if (shouldDismiss) {
-                        android.util.Log.d("OverlayService", "🛑 Dismissing overlay after stable detection")
-                        cleanupAndStop()
-                        return
-                    }
-
-                    // INCREASED interval for better stability
-                    handler.postDelayed(this, 2000) // 2 seconds instead of 1.5
+                    handler.postDelayed(this, 2000)
                 } catch (e: Exception) {
-                    android.util.Log.e("OverlayService", "❌ Error in monitoring: ${e.message}")
-                    // Don't immediately stop on error - give it another chance
+                    Log.e(TAG, "Err: ${e.message}")
                     handler.postDelayed(this, 3000)
                 }
             }
         }
-        // INCREASED initial delay
-        handler.postDelayed(checkRunnable!!, 3000) // Start after 3 seconds instead of 2
+        handler.postDelayed(checkRunnable!!, 1000)
     }
 
     private fun getCurrentForegroundApp(): String? {
         return try {
             val currentApp = getCurrentAppFromUsageStats()
             
-            // IMPROVED: Better null handling
             if (currentApp == null) {
-                android.util.Log.d("OverlayService", "❓ No app detected - maintaining current state")
-                // Don't assume blocked app is running, return null to avoid false positives
                 return null
             }
             
             if (isLauncherApp(currentApp)) {
-                android.util.Log.d("OverlayService", "🏠 Launcher detected: '$currentApp' -> HOME_SCREEN")
                 return "HOME_SCREEN"
             }
 
             if (currentApp == "com.alaotach.limini") {
-                android.util.Log.d("OverlayService", "📱 Limini app detected")
                 return currentApp
             }
 
-            android.util.Log.d("OverlayService", "✅ Detected app: '$currentApp'")
+            Log.d(TAG, "app: '$currentApp'")
             currentApp
         } catch (e: Exception) {
-            android.util.Log.e("OverlayService", "❌ Error getting current app: ${e.message}")
+            Log.e(TAG, "Err: ${e.message}")
             null
         }
     }
@@ -313,14 +244,14 @@ class OverlayService : Service() {
             }?.packageName
 
             if (recentApp != null) {
-                android.util.Log.d("OverlayService", "UsageStats found app: $recentApp")
+                Log.d(TAG, "app: $recentApp")
             } else {
-                android.util.Log.d("OverlayService", "UsageStats: No valid foreground app found")
+                Log.d(TAG, "UsageStats: No foreground app")
             }
 
             recentApp
         } catch (e: Exception) {
-            android.util.Log.e("OverlayService", "Error with UsageStats: ${e.message}")
+            Log.e(TAG, "Err: ${e.message}")
             null
         }
     }
@@ -345,7 +276,7 @@ class OverlayService : Service() {
 
             isSystemApp && isCoreSystemApp
         } catch (e: Exception) {
-            android.util.Log.e("OverlayService", "Error checking system app: ${e.message}")
+            Log.e(TAG, "Error checking system app: ${e.message}")
             false
         }
     }
@@ -381,66 +312,27 @@ class OverlayService : Service() {
 
             val result = isLauncher || isCommonLauncher
             if (result) {
-                android.util.Log.d("OverlayService", "Identified launcher app: $packageName")
+                Log.d(TAG, "Identified launcher app: $packageName")
             }
 
             result
         } catch (e: Exception) {
-            android.util.Log.e("OverlayService", "Error checking launcher app: ${e.message}")
+            Log.e(TAG, "Error checking launcher app: ${e.message}")
             false
         }
     }
 
-    private fun fallbackToActivity(appName: String, timeLimitMinutes: Int) {
-        android.util.Log.w("OverlayService", "⚠️ Falling back to regular activity")
-        val lockIntent = Intent(this, com.alaotach.limini.LockActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            putExtra("appName", appName)
-            putExtra("timeLimitMinutes", timeLimitMinutes)
-        }
-        startActivity(lockIntent)
-        cleanupAndStop()
-    }
-
-    private fun removeOverlay() {
-        try {
-            if (overlayView != null && windowManager != null) {
-                windowManager?.removeView(overlayView)
-                android.util.Log.d("OverlayService", "🗑️ Overlay removed")
-                
-                if (!blockedPackageName.isNullOrEmpty() && userDismissed) {
-                    val dismissIntent = Intent("com.alaotach.limini.OVERLAY_DISMISSED").apply {
-                        putExtra("packageName", blockedPackageName)
-                    }
-                    sendBroadcast(dismissIntent)
-                    android.util.Log.d("OverlayService", "📡 Sent overlay dismissed broadcast for $blockedPackageName")
-                }
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("OverlayService", "Error removing overlay: ${e.message}")
-        } finally {
-            overlayView = null
-            windowManager = null
-            isOverlayShowing = false
-        }
-    }
-
     private fun cleanupAndStop() {
-        if (isServiceDestroying) {
-            android.util.Log.d("OverlayService", "Already cleaning up, ignoring duplicate call")
-            return
-        }
-        
+        if (isServiceDestroying) return
         isServiceDestroying = true
-        
-        checkRunnable?.let { 
-            handler.removeCallbacks(it)
-            android.util.Log.d("OverlayService", "🛑 Stopped monitoring")
-        }
-        checkRunnable = null
-        
+        handler.removeCallbacksAndMessages(null)
         removeOverlay()
-        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
         stopSelf()
     }
 
@@ -459,25 +351,37 @@ class OverlayService : Service() {
         startActivity(liminiIntent)
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        
-        if (!isServiceDestroying) {
-            isServiceDestroying = true
+    private fun removeOverlay() {
+        try {
+            if (overlayView != null && windowManager != null) {
+                windowManager?.removeView(overlayView)
+                Log.d(TAG, "🗑️ Overlay removed")
+                if (!blockedPackageName.isNullOrEmpty()) {
+                    val dismissIntent = Intent("com.alaotach.limini.OVERLAY_DISMISSED").apply {
+                        putExtra("packageName", blockedPackageName)
+                    }
+                    sendBroadcast(dismissIntent)
+                    Log.d(TAG, "📡 Sent overlay dismissed broadcast for $blockedPackageName")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error removing overlay: ${e.message}")
+        } finally {
+            overlayView = null
+            windowManager = null
+            isOverlayShowing = false
         }
-        
-        checkRunnable?.let { handler.removeCallbacks(it) }
-        checkRunnable = null
-        
+    }
+
+    override fun onDestroy() {
+        Log.d(TAG, "💥 Overlay service destroyed")
+        super.onDestroy()
+        cleanupAndStop()
         try {
             unregisterReceiver(dismissReceiver)
         } catch (e: Exception) {
-            android.util.Log.e("OverlayService", "Error unregistering receiver: ${e.message}")
+            Log.e(TAG, "Error unregistering receiver: ${e.message}")
         }
-
-        removeOverlay()
-        
-        android.util.Log.d("OverlayService", "🛑 Overlay service destroyed")
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

@@ -22,8 +22,6 @@ import android.content.BroadcastReceiver
 import android.content.IntentFilter
 
 class AppUsageAccessibilityService : AccessibilityService() {
-    private val appUsageMap = mutableMapOf<String, AppUsageInfo>()
-    private val iconCache = mutableMapOf<String, ByteArray?>()
     private var currPkg = ""
     private var startTime = 0L
     private var h: Handler? = null
@@ -36,7 +34,6 @@ class AppUsageAccessibilityService : AccessibilityService() {
                     val packageName = intent.getStringExtra("packageName")
                     if (packageName != null) {
                         activeOverlays.remove(packageName)
-                        Log.d(TAG, "🗑️ Cleared overlay flag for $packageName")
                     }
                 }
             }
@@ -46,90 +43,36 @@ class AppUsageAccessibilityService : AccessibilityService() {
     companion object {
         private const val TAG = "AppUsageService"
     }
-
-    data class AppUsageInfo(
-        val packageName: String,
-        var appName: String,
-        var iconRes: ByteArray?,
-        var usageTime: Long
-    )
-
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         try {
             if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
                 val newPkg = event.packageName?.toString()
                 if (newPkg.isNullOrBlank()) return
-                
-                val now = System.currentTimeMillis()
-                Log.d(TAG, "🔄 Window state changed: $newPkg")
-
                 if (shouldIgnorePackage(newPkg)) {
-                    Log.d(TAG, "⏭️ Ignoring package: $newPkg")
-                    stopCurrentSession(now)
                     return
                 }
-
-                // Stop previous session if different app
-                if (currPkg.isNotEmpty() && currPkg != newPkg && !shouldIgnorePackage(currPkg)) {
+                if (currPkg == newPkg) {
+                    return
+                }
+                val now = System.currentTimeMillis()
+                Log.d(TAG, "App switch detected from '$currPkg' to '$newPkg'")
+                if (currPkg.isNotEmpty()) {
                     val sessionTime = now - startTime
                     if (sessionTime > 0) {
-                        Log.d(TAG, "📊 $currPkg session: ${sessionTime}ms (not saving - using system stats)")
                     }
                 }
-
-                // Start new session
-                if (currPkg != newPkg) {
-                    currPkg = newPkg
-                    startTime = now
-                    
-                    // Clear overlay flag when switching to different app
-                    activeOverlays.clear()
-                    
-                    // Initialize app info if needed
-                    if (!appUsageMap.containsKey(currPkg)) {
-                        appUsageMap[currPkg] = AppUsageInfo(
-                            currPkg, 
-                            getAppLabel(currPkg), 
-                            null, // Don't load icons initially to avoid crashes
-                            0L
-                        )
-                    }
-                    
-                    Log.d(TAG, "▶️ Started tracking: $currPkg (stored: ${getStoredUsageTime(currPkg)}ms)")
-                    sendUsageUpdate()
-                }
+                currPkg = newPkg
+                startTime = now
+                activeOverlays.clear()
+                sendUsageUpdate()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Error in onAccessibilityEvent: ${e.message}", e)
-        }
-    }
-    
-    private fun stopCurrentSession(now: Long) {
-        if (currPkg.isNotEmpty() && !shouldIgnorePackage(currPkg)) {
-            val sessionTime = now - startTime
-            if (sessionTime > 0) {
-                Log.d(TAG, "⏹️ Stopped $currPkg, session time: ${sessionTime}ms (not saving - using system stats)")
-            }
-            currPkg = ""
-            startTime = 0L
-            sendUsageUpdate()
-        }
-    }
-    
-    private fun updateAppUsage(packageName: String, sessionTime: Long) {
-        try {
-            val usageInfo = appUsageMap.getOrPut(packageName) {
-                AppUsageInfo(packageName, getAppLabel(packageName), null, 0L)
-            }
-            usageInfo.usageTime += sessionTime
-        } catch (e: Exception) {
-            Log.e(TAG, "Error updating app usage for $packageName: ${e.message}")
+            Log.e(TAG, "Error in onAccessibilityEvent: ${e.message}", e)
         }
     }
     
     private fun getStoredUsageTime(packageName: String): Long {
         return try {
-            // Use Android's built-in usage statistics as the base
             getSystemUsageTime(packageName)
         } catch (e: Exception) {
             Log.e(TAG, "Error getting stored usage for $packageName: ${e.message}")
@@ -157,7 +100,7 @@ class AppUsageAccessibilityService : AccessibilityService() {
             val appUsage = usageStats?.find { it.packageName == packageName }
             val totalTime = appUsage?.totalTimeInForeground ?: 0L
             
-            Log.d(TAG, "📊 System usage for $packageName: ${totalTime}ms (${formatTime(totalTime)})")
+            Log.d(TAG, "System usage for $packageName: ${totalTime}ms (${formatTime(totalTime)})")
             totalTime
         } catch (e: Exception) {
             Log.e(TAG, "Error getting system usage for $packageName: ${e.message}")
@@ -175,7 +118,7 @@ class AppUsageAccessibilityService : AccessibilityService() {
         val total = storedTime + currentSessionTime
         
         if (packageName == currPkg) {
-            Log.d(TAG, "⏱️ Usage calc for $packageName: stored=${storedTime}ms + session=${currentSessionTime}ms = ${total}ms")
+            Log.d(TAG, "Usage calc for $packageName: stored=${storedTime}ms + session=${currentSessionTime}ms = ${total}ms")
         }
         
         return total
@@ -184,10 +127,8 @@ class AppUsageAccessibilityService : AccessibilityService() {
     private fun checkTimeLimit() {
         try {
             if (currPkg.isEmpty()) return
-            
-            // Check if overlay is already active for this app
             if (activeOverlays.contains(currPkg)) {
-                Log.d(TAG, "🚫 Overlay already active for $currPkg - skipping")
+                Log.d(TAG, "active")
                 return
             }
             
@@ -199,9 +140,7 @@ class AppUsageAccessibilityService : AccessibilityService() {
                 val timeLimitMs = timeLimitMinutes * 60 * 1000L
                 
                 if (totalUsage >= timeLimitMs) {
-                    Log.d(TAG, "⚠️ Time limit exceeded for $currPkg: ${totalUsage}ms >= ${timeLimitMs}ms")
-                    
-                    // Mark overlay as active to prevent repeated triggers
+                    Log.d(TAG, "exceeded $currPkg: ${totalUsage}ms >= ${timeLimitMs}ms")
                     activeOverlays.add(currPkg)
                     
                     val appName = getAppLabel(currPkg)
@@ -214,17 +153,16 @@ class AppUsageAccessibilityService : AccessibilityService() {
                 } else {
                     val remainingMs = timeLimitMs - totalUsage
                     val remainingMinutes = remainingMs / (60 * 1000)
-                    Log.d(TAG, "⏱️ $currPkg within limit: ${remainingMinutes}m remaining")
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error checking time limit: ${e.message}")
+            Log.e(TAG, "Err: ${e.message}")
         }
     }
 
     private fun shouldIgnorePackage(pkg: String): Boolean {
         val ignorePkgs = setOf(
-            packageName, // Ignore Limini itself
+            packageName,
             "android", 
             "com.android.systemui", 
             "com.google.android.googlequicksearchbox",
@@ -247,7 +185,7 @@ class AppUsageAccessibilityService : AccessibilityService() {
     private fun sendUsageUpdate() {
         try {
             val now = System.currentTimeMillis()
-            Log.d(TAG, "📡 Sending usage update")
+            Log.d(TAG, "Sending usage update")
             
             val pm = applicationContext.packageManager
             val allUserApps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
@@ -261,7 +199,7 @@ class AppUsageAccessibilityService : AccessibilityService() {
                     }
                 }
 
-            Log.d(TAG, "📱 Found ${allUserApps.size} user apps")
+            Log.d(TAG, "${allUserApps.size} apps")
 
             val usageList = allUserApps.mapNotNull { appInfo ->
                 try {
@@ -272,7 +210,7 @@ class AppUsageAccessibilityService : AccessibilityService() {
                     mapOf(
                         "packageName" to pkg,
                         "appName" to appName,
-                        "icon" to null as ByteArray?, // Don't send icons for now
+                        "icon" to null as ByteArray?,
                         "usageTime" to totalUsage
                     )
                 } catch (e: Exception) {
@@ -290,9 +228,9 @@ class AppUsageAccessibilityService : AccessibilityService() {
             intent.putExtra("usageList", ArrayList(usageList.map { HashMap(it) }))
             sendBroadcast(intent)
             
-            Log.d(TAG, "✅ Broadcast sent with ${usageList.size} items")
+            Log.d(TAG, "Broadcast sent with ${usageList.size} items")
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Error sending usage update: ${e.message}", e)
+            Log.e(TAG, "Err: ${e.message}", e)
         }
     }
 
@@ -302,7 +240,7 @@ class AppUsageAccessibilityService : AccessibilityService() {
             val appInfo = pm.getApplicationInfo(pkg, 0)
             pm.getApplicationLabel(appInfo).toString()
         } catch (e: Exception) {
-            Log.e(TAG, "Error getting app label for $pkg: ${e.message}")
+            Log.e(TAG, "err $pkg: ${e.message}")
             pkg.split(".").lastOrNull()?.replaceFirstChar {
                 if (it.isLowerCase()) it.titlecase() else it.toString()
             } ?: pkg
@@ -310,41 +248,32 @@ class AppUsageAccessibilityService : AccessibilityService() {
     }
 
     override fun onServiceConnected() {
-        super.onServiceConnected()
-        Log.d(TAG, "🚀 Accessibility service connected!")
-        
+        super.onServiceConnected()        
         try {
-            // Register overlay dismiss receiver
             val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 Context.RECEIVER_NOT_EXPORTED
             } else {
                 0
             }
             registerReceiver(overlayDismissReceiver, IntentFilter("com.alaotach.limini.OVERLAY_DISMISSED"), flags)
-            
-            // Create notification channel
             createNotificationChannel()
             
             h = Handler(Looper.getMainLooper())
-
-            // Start periodic checks every 3 seconds
             h?.postDelayed(object : Runnable {
                 override fun run() {
                     try {
                         sendUsageUpdate()
-                        updateNotification() // Update notification with current app
-                        checkTimeLimit() // Check if current app exceeds time limit
+                        updateNotification()
+                        checkTimeLimit()
                         h?.postDelayed(this, 3000)
                     } catch (e: Exception) {
-                        Log.e(TAG, "Error in periodic update: ${e.message}")
-                        h?.postDelayed(this, 3000) // Continue despite errors
+                        Log.e(TAG, "Err: ${e.message}")
+                        h?.postDelayed(this, 3000)
                     }
                 }
             }, 3000)
-            
-            Log.d(TAG, "✅ Accessibility service setup complete")
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Error setting up accessibility service: ${e.message}", e)
+            Log.e(TAG, "Err: ${e.message}", e)
         }
     }
 
@@ -364,7 +293,7 @@ class AppUsageAccessibilityService : AccessibilityService() {
                 notificationManager.createNotificationChannel(channel)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error creating notification channel: ${e.message}")
+            Log.e(TAG, "Err: ${e.message}")
         }
     }
     
@@ -375,8 +304,6 @@ class AppUsageAccessibilityService : AccessibilityService() {
             val appName = getAppLabel(currPkg)
             val totalTime = getTotalUsageTime(currPkg)
             val usageText = formatTime(totalTime)
-            
-            // Check if app has time limit
             val prefs = getSharedPreferences("time_limits", Context.MODE_PRIVATE)
             val timeLimitMinutes = prefs.getInt(currPkg, Int.MAX_VALUE)
             
@@ -386,7 +313,7 @@ class AppUsageAccessibilityService : AccessibilityService() {
             val contentText = if (timeLimitMinutes != Int.MAX_VALUE) {
                 val limitMs = timeLimitMinutes * 60 * 1000L
                 if (totalTime >= limitMs) {
-                    "⚠️ LIMIT EXCEEDED: $usageText / ${timeLimitMinutes}m"
+                    "LIMIT EXCEEDED: $usageText / ${timeLimitMinutes}m"
                 } else {
                     "Usage: $usageText / ${timeLimitMinutes}m limit"
                 }
@@ -406,7 +333,7 @@ class AppUsageAccessibilityService : AccessibilityService() {
             notificationManager.notify(1, notification)
             
         } catch (e: Exception) {
-            Log.e(TAG, "Error updating notification: ${e.message}")
+            Log.e(TAG, "Err: ${e.message}")
         }
     }
     
@@ -422,37 +349,30 @@ class AppUsageAccessibilityService : AccessibilityService() {
     }
 
     override fun onInterrupt() {
-        Log.w(TAG, "⚠️ Accessibility Service Interrupted")
         try {
             h?.removeCallbacksAndMessages(null)
         } catch (e: Exception) {
-            Log.e(TAG, "Error during interrupt: ${e.message}")
+            Log.e(TAG, "Err: ${e.message}")
         }
     }
 
     override fun onDestroy() {
-        Log.d(TAG, "🔄 Accessibility service destroyed")
         try {
             super.onDestroy()
-            
-            // Unregister receiver
             try {
                 unregisterReceiver(overlayDismissReceiver)
             } catch (e: Exception) {
-                Log.e(TAG, "Error unregistering overlay dismiss receiver: ${e.message}")
+                Log.e(TAG, "Err: ${e.message}")
             }
             
-            // Clear notification
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.cancel(1)
             
             h?.removeCallbacksAndMessages(null)
             h = null
-            appUsageMap.clear()
-            iconCache.clear()
             activeOverlays.clear()
         } catch (e: Exception) {
-            Log.e(TAG, "Error during destroy: ${e.message}")
+            Log.e(TAG, "Err: ${e.message}")
         }
     }
 }
