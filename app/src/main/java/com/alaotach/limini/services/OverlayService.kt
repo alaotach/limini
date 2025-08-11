@@ -4,8 +4,10 @@ import android.app.*
 import android.content.*
 import android.graphics.PixelFormat
 import android.os.*
+import android.provider.Settings
 import android.util.Log
 import android.view.*
+import android.view.inputmethod.InputMethodManager
 import android.widget.*
 import androidx.core.app.NotificationCompat
 import com.alaotach.limini.R
@@ -146,6 +148,13 @@ class OverlayService : Service() {
         }
 
         try {
+            // Check if we have overlay permission
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+                Log.e(TAG, "No overlay permission - cannot show question challenge")
+                cleanupAndStop()
+                return
+            }
+
             isOverlayShowing = true
             windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
             overlayView = LayoutInflater.from(this).inflate(R.layout.overlay_question, null)            
@@ -157,7 +166,7 @@ class OverlayService : Service() {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             } else {
                 @Suppress("DEPRECATION")
-                WindowManager.LayoutParams.TYPE_PHONE
+                WindowManager.LayoutParams.TYPE_SYSTEM_ALERT
             }
 
             val params = WindowManager.LayoutParams(
@@ -166,10 +175,23 @@ class OverlayService : Service() {
                 layoutFlag,
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+                WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM or
+                WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
                 PixelFormat.TRANSLUCENT
             )
+            
+            // Allow input method (keyboard) to be shown
+            params.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+            
             windowManager?.addView(overlayView, params)
+            
+            // Show keyboard after overlay is added
+            handler.postDelayed({
+                showKeyboard()
+            }, 300)
             startMonitoringCurrentApp()
             
         } catch (e: Exception) {
@@ -187,12 +209,67 @@ class OverlayService : Service() {
         statusMessage = overlayView?.findViewById(R.id.statusMessage)
         appNameText = overlayView?.findViewById(R.id.appNameText)
         categoryBadge = overlayView?.findViewById(R.id.categoryBadge)
+        
+        // Ensure the EditText can receive focus and input
+        reasonInput?.apply {
+            requestFocus()
+            isFocusable = true
+            isFocusableInTouchMode = true
+            
+            // Show keyboard when EditText is touched
+            setOnTouchListener { _, _ ->
+                requestFocus()
+                showKeyboard()
+                false
+            }
+        }
+    }
+    
+    private fun showKeyboard() {
+        reasonInput?.let { editText ->
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+            editText.requestFocus()
+            handler.postDelayed({
+                imm.showSoftInput(editText, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+            }, 100)
+        }
     }
 
     private fun setupQuestion() {
-        currentQuestion = questionManager.getRandomQuestion()
-        
+        // Use coroutine to handle AI question generation
+        serviceScope.launch {
+            try {
+                Log.d(TAG, "🎯 Starting question setup - checking AI generation")
+                
+                // Try AI question generation first based on user settings, fallback to hardcoded questions
+                currentQuestion = questionManager.getRandomQuestionWithAI()
+                
+                if (currentQuestion != null) {
+                    Log.d(TAG, "✅ Got AI question: ${currentQuestion!!.question}")
+                } else {
+                    Log.d(TAG, "❌ AI question generation failed, using hardcoded questions")
+                    // Final fallback to hardcoded questions
+                    currentQuestion = questionManager.getRandomQuestion()
+                }
+                
+                // Update UI on main thread
+                withContext(Dispatchers.Main) {
+                    setupQuestionUI()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error setting up question: ${e.message}", e)
+                // Fallback to hardcoded questions on error
+                withContext(Dispatchers.Main) {
+                    currentQuestion = questionManager.getRandomQuestion()
+                    setupQuestionUI()
+                }
+            }
+        }
+    }
+    
+    private fun setupQuestionUI() {
         if (currentQuestion == null) {
+            showError("No questions available")
             return
         }
 
@@ -326,7 +403,7 @@ class OverlayService : Service() {
         statusMessage?.text = message
         statusMessage?.visibility = View.VISIBLE
         statusMessage?.setTextColor(
-            if (isError) getColor(android.R.color.holo_red_light)
+            if (isError) getColor(android.R.color.holo_orange_light)
             else getColor(android.R.color.white)
         )
     }
@@ -334,7 +411,7 @@ class OverlayService : Service() {
     private fun showError(message: String) {
         statusMessage?.text = message
         statusMessage?.visibility = View.VISIBLE
-        statusMessage?.setTextColor(getColor(android.R.color.holo_red_light))
+        statusMessage?.setTextColor(getColor(android.R.color.holo_orange_light))
     }
 
     private fun showSimpleBlock() {
@@ -343,6 +420,13 @@ class OverlayService : Service() {
         }
 
         try {
+            // Check if we have overlay permission
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+                Log.e(TAG, "No overlay permission - cannot show simple block")
+                cleanupAndStop()
+                return
+            }
+
             isOverlayShowing = true
             windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
             overlayView = LayoutInflater.from(this).inflate(R.layout.overlay_simple_block, null)
@@ -372,7 +456,7 @@ class OverlayService : Service() {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             } else {
                 @Suppress("DEPRECATION")
-                WindowManager.LayoutParams.TYPE_PHONE
+                WindowManager.LayoutParams.TYPE_SYSTEM_ALERT
             }
 
             val params = WindowManager.LayoutParams(
@@ -381,6 +465,8 @@ class OverlayService : Service() {
                 layoutFlag,
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
                 WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
                 PixelFormat.TRANSLUCENT
             )
@@ -407,18 +493,28 @@ class OverlayService : Service() {
 
                 try {
                     val currentApp = getCurrentForegroundApp()
-                    if (currentApp != blockedPackageName && currentApp != "com.alaotach.limini") {
+                    Log.d(TAG, "🔍 Simple monitoring - Current: '$currentApp', Blocked: '$blockedPackageName'")
+                    
+                    // If user switched to a different app (not Limini or blocked app), dismiss overlay
+                    if (currentApp != null && 
+                        currentApp != blockedPackageName && 
+                        currentApp != "com.alaotach.limini" && 
+                        currentApp != "HOME_SCREEN") {
+                        
+                        Log.d(TAG, "✅ User switched away from blocked app, dismissing overlay")
                         cleanupAndStop()
                         return
                     }
-                    handler.postDelayed(this, 2000)
+                    
+                    // If we can't detect current app or it's still the blocked app, keep monitoring
+                    handler.postDelayed(this, 1500) // Check every 1.5 seconds for faster response
                 } catch (e: Exception) {
                     Log.e(TAG, "Error in simple monitoring: ${e.message}")
-                    handler.postDelayed(this, 3000)
+                    handler.postDelayed(this, 2000)
                 }
             }
         }
-        handler.postDelayed(checkRunnable!!, 2000)
+        handler.postDelayed(checkRunnable!!, 1500)
     }
 
     private fun startMonitoringCurrentApp() {
@@ -426,13 +522,9 @@ class OverlayService : Service() {
             return
         }
         val sharedPrefs = getSharedPreferences("settings", Context.MODE_PRIVATE)
-        val regenerateOnSwitch = sharedPrefs.getBoolean("regenerate_question_on_switch", false) // Disabled by default
+        val regenerateOnSwitch = sharedPrefs.getBoolean("regenerate_question_on_switch", true) // Always enabled by default
 
-        if (!regenerateOnSwitch) {
-            Log.d(TAG, "Question regeneration on app switch is disabled - skipping monitoring")
-            return
-        }
-
+        // Always monitor app switching to regenerate questions
         var consecutiveSwitchCount = 0
         var lastDetectedApp: String? = null
 
@@ -505,28 +597,29 @@ class OverlayService : Service() {
         return try {
             val usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
             val now = System.currentTimeMillis()
-            val start = now - 5000L
+            val start = now - 3000L // Look at last 3 seconds
 
             val usageStats = usageStatsManager.queryUsageStats(
                 UsageStatsManager.INTERVAL_BEST,
                 start,
                 now
             )
+            
+            // Filter and sort by most recent usage
             val recentApps = usageStats?.filter { stat ->
                 stat.lastTimeUsed > 0 &&
                 stat.totalTimeInForeground > 0 &&
                 !isSystemApp(stat.packageName) &&
-                !(stat.packageName == "com.alaotach.limini" && (now - stat.lastTimeUsed) < 3000) &&
-                stat.totalTimeInForeground > 100 &&
-                (now - stat.lastTimeUsed) < 4000
+                (now - stat.lastTimeUsed) < 2500 && // Used within last 2.5 seconds
+                stat.totalTimeInForeground > 50 // Minimum usage time
             }?.sortedByDescending { it.lastTimeUsed }
 
             val recentApp = recentApps?.firstOrNull()?.packageName
 
             if (recentApp != null) {
-                Log.d(TAG, "Usage stats app: $recentApp (from ${recentApps?.size ?: 0} candidates)")
+                Log.d(TAG, "🎯 Usage stats detected app: $recentApp (from ${recentApps.size} candidates)")
             } else {
-                Log.d(TAG, "UsageStats: No foreground app")
+                Log.d(TAG, "❌ No recent foreground app detected")
             }
 
             recentApp
@@ -618,25 +711,42 @@ class OverlayService : Service() {
     }
 
     private fun cleanupAndStop() {
+        Log.d(TAG, "🧹 Cleaning up overlay service")
         isServiceDestroying = true
         isOverlayShowing = false
         
+        // Remove any pending callbacks
         checkRunnable?.let { handler.removeCallbacks(it) }
+        checkRunnable = null
         
+        // Remove overlay view safely
         try {
             if (overlayView != null && windowManager != null) {
                 windowManager?.removeView(overlayView)
+                Log.d(TAG, "✅ Overlay view removed")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Err: ${e.message}", e)
+            Log.e(TAG, "Error removing overlay view: ${e.message}")
         }
         
         overlayView = null
         windowManager = null
         
+        // Cancel coroutines
         serviceScope.cancel()
-        stopForeground(true)
-        stopSelf()
+        
+        // Send dismissal broadcast
+        val dismissIntent = Intent("com.alaotach.limini.OVERLAY_DISMISSED")
+        dismissIntent.putExtra("packageName", blockedPackageName)
+        sendBroadcast(dismissIntent)
+        
+        // Stop service
+        try {
+            stopForeground(true)
+            stopSelf()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping service: ${e.message}")
+        }
     }
 
     override fun onDestroy() {

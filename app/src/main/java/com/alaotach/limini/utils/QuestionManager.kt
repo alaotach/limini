@@ -1,7 +1,16 @@
 package com.alaotach.limini.utils
 
 import android.content.Context
+import android.util.Log
 import com.alaotach.limini.data.*
+import kotlinx.coroutines.*
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.io.OutputStreamWriter
+import java.net.HttpURLConnection
+import java.net.URL
 import kotlin.random.Random
 
 class QuestionManager(private val context: Context) {
@@ -9,6 +18,17 @@ class QuestionManager(private val context: Context) {
     private val sharedPrefs = context.getSharedPreferences("questions", Context.MODE_PRIVATE)
     
     companion object {
+        private const val TAG = "QuestionManager"
+        private const val AI_ENDPOINT = "https://ai.hackclub.com/chat/completions"
+        
+        // Rotate between different models for variety
+        private val AI_MODELS = listOf(
+            "meta-llama/llama-4-maverick-17b-128e-instruct",
+            "openai/gpt-oss-120b", 
+            "qwen/qwen3-32b",
+            "openai/gpt-oss-20b"
+        )
+        
         val CATEGORIES = listOf(
             QuestionCategory("gk", "General Knowledge", "🌍", "World facts, history, geography"),
             QuestionCategory("maths", "Mathematics", "🔢", "Arithmetic, algebra, geometry"),
@@ -103,6 +123,9 @@ class QuestionManager(private val context: Context) {
         ))
     }
     
+    private val recentAIQuestions = mutableListOf<String>()
+    private val maxRecentQuestions = 10
+    
     private var usedQuestions = mutableSetOf<String>()
     
     fun getEnabledCategories(): Set<String> {
@@ -157,6 +180,11 @@ class QuestionManager(private val context: Context) {
         usedQuestions.clear()
     }
     
+    fun clearRecentAIQuestions() {
+        recentAIQuestions.clear()
+        Log.d(TAG, "🗑️ Cleared recent AI questions cache")
+    }
+    
     fun validateAnswer(question: Question, userAnswer: String): Boolean {
         return when (question.type) {
             QuestionType.MULTIPLE_CHOICE -> {
@@ -188,5 +216,236 @@ class QuestionManager(private val context: Context) {
     
     fun getCategoryById(id: String): QuestionCategory? {
         return CATEGORIES.find { it.id == id }
+    }
+    
+    // AI Question Generation Methods
+    suspend fun generateAIQuestion(category: QuestionCategory, difficulty: Difficulty = Difficulty.MEDIUM): Question? {
+        return withContext(Dispatchers.IO) {
+            try {
+                Log.d(TAG, "🤖 Generating AI question for category: ${category.name}")
+                Log.d(TAG, "🌐 AI endpoint: $AI_ENDPOINT")
+                
+                val prompt = buildQuestionPrompt(category, difficulty)
+                Log.d(TAG, "📝 Built prompt: ${prompt.take(200)}...")
+                
+                val response = makeAIRequest(prompt)
+                Log.d(TAG, "📥 Got AI response: ${response.take(200)}...")
+                
+                val aiQuestion = parseQuestionResponse(response, category)
+                
+                if (aiQuestion != null) {
+                    Log.d(TAG, "✅ AI question generated successfully: ${aiQuestion.question}")
+                } else {
+                    Log.w(TAG, "⚠️ parseQuestionResponse returned null")
+                }
+                aiQuestion
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Failed to generate AI question: ${e.message}", e)
+                null
+            }
+        }
+    }
+    
+    private fun buildQuestionPrompt(category: QuestionCategory, difficulty: Difficulty): String {
+        val difficultyLevel = when (difficulty) {
+            Difficulty.EASY -> "basic level, suitable for general knowledge"
+            Difficulty.MEDIUM -> "intermediate level, requires some specific knowledge"
+            Difficulty.HARD -> "advanced level, for experts or enthusiasts"
+        }
+        
+        val recentQuestionsContext = if (recentAIQuestions.isNotEmpty()) {
+            "\nAvoid creating questions similar to these recent ones:\n" + 
+            recentAIQuestions.takeLast(5).joinToString("\n") { "- $it" } + "\n"
+        } else ""
+        
+        val timestamp = System.currentTimeMillis() % 10000 // Add some randomness
+        
+        return """
+Create a ${difficultyLevel} multiple-choice question about ${category.name}: ${category.description}.
+
+Requirements:
+- Educational and factual
+- Clear, unambiguous question
+- Exactly 4 distinct options
+- Only one correct answer
+- No trick questions
+- Must be unique and different from recent questions
+- Be creative and vary the topic within the category${recentQuestionsContext}
+Session ID: $timestamp
+
+Response format: ONLY valid JSON, no markdown, no explanation, no extra text:
+
+{"question":"What is the capital of France?","options":["London","Paris","Berlin","Madrid"],"correct_answer":"Paris","difficulty":"medium"}
+
+Category: ${category.name}
+Difficulty: ${difficulty.name.lowercase()}
+        """.trimIndent()
+    }
+    
+    private fun makeAIRequest(prompt: String): String {
+        val url = URL(AI_ENDPOINT)
+        val connection = url.openConnection() as HttpURLConnection
+        var response = ""
+
+        try {
+            Log.d(TAG, "🌐 Making AI request for question generation")
+            Log.d(TAG, "🔗 URL: $AI_ENDPOINT")
+            
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.doOutput = true
+            connection.connectTimeout = 15000 // 15 second timeout
+            connection.readTimeout = 15000
+            
+            val selectedModel = AI_MODELS[Random.nextInt(AI_MODELS.size)]
+            Log.d(TAG, "🤖 Using AI model: $selectedModel")
+            
+            val jsonPayload = JSONObject().apply {
+                put("model", selectedModel)
+                put("messages", JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("role", "system")
+                        put("content", "You are a question generator. Respond only with valid JSON. No markdown, no explanations, no extra text.")
+                    })
+                    put(JSONObject().apply {
+                        put("role", "user")
+                        put("content", prompt)
+                    })
+                })
+                put("max_tokens", 150)
+                put("temperature", 0.9)
+                put("top_p", 0.9)
+            }
+            
+            Log.d(TAG, "📤 Sending payload: ${jsonPayload.toString().take(300)}...")
+            
+            OutputStreamWriter(connection.outputStream).use { writer ->
+                writer.write(jsonPayload.toString())
+                writer.flush()
+            }
+            
+            val responseCode = connection.responseCode
+            Log.d(TAG, "📡 Response code: $responseCode")
+            
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                BufferedReader(InputStreamReader(connection.inputStream)).use { reader ->
+                    val responseText = reader.readText()
+                    Log.d(TAG, "📄 Full response: $responseText")
+                    
+                    val responseJson = JSONObject(responseText)
+                    response = responseJson.getJSONArray("choices")
+                        .getJSONObject(0)
+                        .getJSONObject("message")
+                        .getString("content")
+                        
+                    Log.d(TAG, "🔍 AI response content: $response")
+                }
+            } else {
+                val errorStream = connection.errorStream?.let { 
+                    BufferedReader(InputStreamReader(it)).readText() 
+                } ?: "No error details"
+                Log.e(TAG, "HTTP Error: $responseCode, Message: $errorStream")
+                throw Exception("HTTP Error: $responseCode - $errorStream")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception in makeAIRequest: ${e.message}", e)
+            throw e
+        } finally {
+            connection.disconnect()
+        }
+        return response
+    }
+    
+    private fun parseQuestionResponse(response: String, category: QuestionCategory): Question? {
+        return try {
+            // Clean the response by removing markdown code blocks if present
+            val cleanedResponse = response
+                .replace("```json", "")
+                .replace("```", "")
+                .trim()
+            
+            Log.d(TAG, "🧹 Cleaned response: $cleanedResponse")
+            
+            val json = JSONObject(cleanedResponse)
+            
+            val questionText = json.getString("question")
+            val options = json.getJSONArray("options")
+            val optionsList = mutableListOf<String>()
+            
+            for (i in 0 until options.length()) {
+                optionsList.add(options.getString(i))
+            }
+            
+            val correctAnswer = json.getString("correct_answer")
+            val difficultyStr = json.optString("difficulty", "medium")
+            val difficulty = when (difficultyStr.lowercase()) {
+                "easy" -> Difficulty.EASY
+                "hard" -> Difficulty.HARD
+                else -> Difficulty.MEDIUM
+            }
+            
+            // Generate unique ID for AI question
+            val questionId = "ai_${category.id}_${System.currentTimeMillis()}"
+            
+            val question = Question(
+                id = questionId,
+                category = category,
+                question = questionText,
+                options = optionsList,
+                correctAnswer = correctAnswer,
+                difficulty = difficulty,
+                type = QuestionType.MULTIPLE_CHOICE
+            )
+            
+            // Track this question to avoid repetition
+            recentAIQuestions.add(questionText)
+            if (recentAIQuestions.size > maxRecentQuestions) {
+                recentAIQuestions.removeAt(0) // Remove oldest
+            }
+            
+            Log.d(TAG, "✅ AI question created and tracked: '$questionText'")
+            question
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Failed to parse question response: ${e.message}", e)
+            Log.e(TAG, "📄 Raw response was: $response")
+            null
+        }
+    }
+    
+    fun isAIQuestionsEnabled(): Boolean {
+        val enabled = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+            .getBoolean("enable_ai_questions", true) // Default to true for AI questions
+        Log.d(TAG, "🤖 AI Questions enabled: $enabled")
+        return enabled
+    }
+    
+    // Enhanced getRandomQuestion that can use AI generation
+    suspend fun getRandomQuestionWithAI(excludeUsed: Boolean = true, useAI: Boolean = isAIQuestionsEnabled()): Question? {
+        val enabledCategories = getEnabledCategories()
+        
+        Log.d(TAG, "🎲 getRandomQuestionWithAI called - useAI: $useAI, categories: $enabledCategories")
+        
+        // Try to get AI question first if enabled
+        if (useAI && enabledCategories.isNotEmpty()) {
+            val randomCategory = CATEGORIES.filter { it.id in enabledCategories }.randomOrNull()
+            if (randomCategory != null) {
+                Log.d(TAG, "🎯 Attempting AI generation for category: ${randomCategory.name}")
+                val aiQuestion = generateAIQuestion(randomCategory)
+                if (aiQuestion != null) {
+                    Log.d(TAG, "🚀 AI question successfully generated!")
+                    return aiQuestion
+                } else {
+                    Log.w(TAG, "⚠️ AI question generation returned null")
+                }
+            } else {
+                Log.w(TAG, "⚠️ No random category selected for AI generation")
+            }
+        } else {
+            Log.d(TAG, "📝 Skipping AI generation - useAI: $useAI, hasCategories: ${enabledCategories.isNotEmpty()}")
+        }
+        
+        // Fallback to hardcoded questions
+        Log.d(TAG, "📚 Falling back to hardcoded questions")
+        return getRandomQuestion(excludeUsed)
     }
 }

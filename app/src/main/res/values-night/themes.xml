@@ -1,16 +1,27 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Splash Screen Theme (Dark Mode) -->
+    <style name="SplashTheme" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:windowBackground">@drawable/splash_background</item>
+        <item name="android:statusBarColor">@color/limini_cream</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+
     <!-- Base application theme. -->
     <style name="Theme.Limini" parent="Theme.MaterialComponents.DayNight.DarkActionBar">
-        <!-- Primary brand color. -->
-        <item name="colorPrimary">@color/purple_200</item>
-        <item name="colorPrimaryVariant">@color/purple_700</item>
-        <item name="colorOnPrimary">@color/black</item>
+        <!-- Limini brand colors (dark mode) -->
+        <item name="colorPrimary">@color/limini_cream</item>
+        <item name="colorPrimaryVariant">@color/limini_navy</item>
+        <item name="colorOnPrimary">@color/limini_navy</item>
         <!-- Secondary brand color. -->
-        <item name="colorSecondary">@color/teal_200</item>
-        <item name="colorSecondaryVariant">@color/teal_200</item>
-        <item name="colorOnSecondary">@color/black</item>
+        <item name="colorSecondary">@color/limini_cream</item>
+        <item name="colorSecondaryVariant">@color/limini_cream</item>
+        <item name="colorOnSecondary">@color/limini_navy</item>
         <!-- Status bar color. -->
         <item name="android:statusBarColor">?attr/colorPrimaryVariant</item>
-        <!-- Customize your theme here. -->
+        
+        <!-- Splash Screen (Android 12+) for dark mode -->
+        <item name="android:windowSplashScreenBackground">@color/limini_navy</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="android:windowSplashScreenBrandingImage">@mipmap/ic_launcher</item>
     </style>
 </resources>

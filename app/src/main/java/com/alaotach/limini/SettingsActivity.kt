@@ -17,7 +17,6 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var titleText: TextView
     private lateinit var questionCard: CardView
     private lateinit var enableQuestionsSwitch: Switch
-    private lateinit var regenerateQuestionSwitch: Switch
     private lateinit var categoryContainer: LinearLayout
     private val categoryCheckboxes = mutableMapOf<String, CheckBox>()
     private lateinit var notificationCard: CardView
@@ -46,7 +45,6 @@ class SettingsActivity : AppCompatActivity() {
         titleText = findViewById(R.id.titleText)
         questionCard = findViewById(R.id.questionCard)
         enableQuestionsSwitch = findViewById(R.id.enableQuestionsSwitch)
-        regenerateQuestionSwitch = findViewById(R.id.regenerateQuestionSwitch)
         categoryContainer = findViewById(R.id.categoryContainer)
         notificationCard = findViewById(R.id.notificationCard)
         enableNotificationsSwitch = findViewById(R.id.enableNotificationsSwitch)
@@ -110,10 +108,6 @@ class SettingsActivity : AppCompatActivity() {
             updateCategoryContainerVisibility(isChecked)
         }
         
-        regenerateQuestionSwitch.setOnCheckedChangeListener { _, _ ->
-            saveSettings()
-        }
-        
         enableNotificationsSwitch.setOnCheckedChangeListener { _, _ ->
             saveSettings()
         }
@@ -167,18 +161,11 @@ class SettingsActivity : AppCompatActivity() {
     
     private fun loadSettings() {
         val questionsEnabled = sharedPrefs.getBoolean("questions_enabled", true)
-        val regenerateEnabled = sharedPrefs.getBoolean("regenerate_question_on_switch", false)
         enableQuestionsSwitch.setOnCheckedChangeListener(null)
         enableQuestionsSwitch.isChecked = questionsEnabled
         enableQuestionsSwitch.setOnCheckedChangeListener { _, isChecked ->
             saveSettings()
             updateCategoryContainerVisibility(isChecked)
-        }
-        
-        regenerateQuestionSwitch.setOnCheckedChangeListener(null)
-        regenerateQuestionSwitch.isChecked = regenerateEnabled
-        regenerateQuestionSwitch.setOnCheckedChangeListener { _, _ ->
-            saveSettings()
         }
         
         updateCategoryContainerVisibility(questionsEnabled)
@@ -225,7 +212,6 @@ class SettingsActivity : AppCompatActivity() {
     
     private fun saveSettings() {
         val questionsEnabled = enableQuestionsSwitch.isChecked
-        val regenerateEnabled = regenerateQuestionSwitch.isChecked
         val notificationsEnabled = enableNotificationsSwitch.isChecked
         val encouragementEnabled = encouragementSwitch.isChecked
         val reminderFreq = reminderFrequencySpinner.selectedItemPosition
@@ -233,7 +219,7 @@ class SettingsActivity : AppCompatActivity() {
         val aiStrictness = aiStrictnessSpinner.selectedItemPosition
         sharedPrefs.edit().apply {
             putBoolean("questions_enabled", questionsEnabled)
-            putBoolean("regenerate_question_on_switch", regenerateEnabled)
+            putBoolean("regenerate_question_on_switch", true) // Always enabled
             putBoolean("notifications_enabled", notificationsEnabled)
             putBoolean("encouragement_enabled", encouragementEnabled)
             putInt("reminder_frequency", reminderFreq)

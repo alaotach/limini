@@ -1,4 +1,4 @@
-﻿package com.alaotach.limini.utils
+package com.alaotach.limini.utils
 
 import android.Manifest
 import android.app.usage.UsageStatsManager
@@ -16,17 +16,19 @@ import android.view.accessibility.AccessibilityManager
 
 class PermissionManager(private val activity: AppCompatActivity) {
 
-    fun checkAllPermissions() {
+        fun checkAllPermissions() {
         if (!hasUsagePermission()) {
             requestUsagePermission()
         } else if (!hasNotifPermission()) {
             requestNotifPermission()
         } else if (!hasOverlayPermission()) {
             requestOverlayPermission()
-        } else if (!isAccessibilityServiceEnabled()) {
-            requestAccessibilityPermission()
         } else {
-            Toast.makeText(activity, "All permissions granted! 🎉", Toast.LENGTH_SHORT).show()
+            if (!isAccessibilityServiceEnabled()) {
+                Toast.makeText(activity, "Core permissions granted! Accessibility service is optional for enhanced features.", Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(activity, "All permissions granted including enhanced features!", Toast.LENGTH_LONG).show()
+            }
         }
     }
     

@@ -23,7 +23,8 @@ class AIValidationService(private val context: Context) {
             try {
                 val prompt = buildPrompt(request)
                 val aiResponseJson = makeAIRequest(prompt)
-                parseValidationResponse(aiResponseJson)
+                val result = parseValidationResponse(aiResponseJson)
+                result
             } catch (e: Exception) {
                 fallbackValidation(request)
             }
@@ -31,27 +32,27 @@ class AIValidationService(private val context: Context) {
     }
     private fun buildPrompt(request: ExtensionRequest): String {
         return """
-            Analyze this app usage extension request. The user answered a question correctly and provided a reason for wanting to extend their app usage time.
+            Evaluate app extension request. User answered correctly but needs reason validation.
 
             App: ${request.appName}
-            Question was answered correctly: ${request.questionResponse.isCorrect}
-            User's reason: "${request.questionResponse.reason}"
-            Requested extension: ${request.requestedMinutes} minutes
+            Reason: "${request.questionResponse.reason}"
+            Requested: ${request.requestedMinutes} minutes
 
-            Evaluate if the reason is:
-            1. Sensible and legitimate (not just "I want to use it" or similar lazy responses).
-            2. Shows some thought or valid purpose.
-            3. Not obviously trying to game the system.
+            Criteria for approval:
+            - Specific purpose (study, work, communication)
+            - Not vague ("bored", "want to use", "need more time")
+            - Shows mindful usage intent
+            - Educational or productive value
 
-            Respond with ONLY a JSON object in the format:
-            {
-                "approved": true/false,
-                "confidence": 0.0-1.0,
-                "feedback": "A brief explanation for your decision.",
-                "suggested_time": <integer>
-            }
-            
-            The 'suggested_time' can be less than requested if the reason is weak but not entirely invalid. Be reasonably lenient; the goal is to promote mindful usage, not to be overly strict.
+            Response: ONLY JSON, no markdown, no explanation:
+
+            {"approved":true,"confidence":0.8,"feedback":"Valid educational purpose","suggested_time":5}
+
+            Evaluation rules:
+            - approved: true if reason shows specific intent
+            - confidence: 0.1-1.0 based on reason quality  
+            - feedback: brief explanation (max 10 words)
+            - suggested_time: 0 if denied, 1-${request.requestedMinutes} if approved
         """.trimIndent()
     }
 
@@ -65,22 +66,34 @@ class AIValidationService(private val context: Context) {
             connection.setRequestProperty("Content-Type", "application/json")
             connection.doOutput = true
             val jsonPayload = JSONObject().apply {
-                put("model", "openai/gpt-oss-120b")
-                put("messages", JSONObject().apply {
-                    put("role", "user")
-                    put("content", prompt)
+                put("model", "meta-llama/llama-4-maverick-17b-128e-instruct")
+                put("messages", org.json.JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("role", "system")
+                        put("content", "You are a validation service. Respond only with valid JSON. No markdown, no explanations, no extra text.")
+                    })
+                    put(JSONObject().apply {
+                        put("role", "user")
+                        put("content", prompt)
+                    })
                 })
-                put("response_format", JSONObject().apply { 
-                    put("type", "json_object")
-                })
+                put("max_tokens", 80)
+                put("temperature", 0.1)
+                put("top_p", 0.8)
             }
+            
             OutputStreamWriter(connection.outputStream).use { writer ->
                 writer.write(jsonPayload.toString())
             }
+            
             val responseCode = connection.responseCode
+            
             if (responseCode == HttpURLConnection.HTTP_OK) {
                 BufferedReader(InputStreamReader(connection.inputStream)).use { reader ->
-                    val responseJson = JSONObject(reader.readText())
+                    val responseText = reader.readText()
+                    Log.d(TAG, "Raw response: $responseText")
+                    
+                    val responseJson = JSONObject(responseText)
                     response = responseJson.getJSONArray("choices")
                         .getJSONObject(0)
                         .getJSONObject("message")
@@ -90,6 +103,9 @@ class AIValidationService(private val context: Context) {
                 val errorStream = BufferedReader(InputStreamReader(connection.errorStream)).readText()
                 throw Exception("HTTP Error: $responseCode, Message: $errorStream")
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Err: ${e.message}", e)
+            throw e
         } finally {
             connection.disconnect()
         }
@@ -97,15 +113,26 @@ class AIValidationService(private val context: Context) {
     }
     private fun parseValidationResponse(response: String): ValidationResult {
         return try {
-            val json = JSONObject(response)
-            ValidationResult(
+            val cleanedResponse = response
+                .replace("```json", "")
+                .replace("```", "")
+                .trim()
+            val json = JSONObject(cleanedResponse)
+            
+            val result = ValidationResult(
                 approved = json.getBoolean("approved"),
                 confidence = json.getDouble("confidence"),
                 feedback = json.getString("feedback"),
-                suggestedTimeMinutes = json.getInt("suggested_time")
+                suggestedTimeMinutes = json.optInt("suggested_time", 0)
             )
+            result
         } catch (e: Exception) {
-            ValidationResult(approved = false, confidence = 0.0, feedback = "Error processing AI response.", suggestedTimeMinutes = 0)
+            ValidationResult(
+                approved = false, 
+                confidence = 0.0, 
+                feedback = "Error processing AI response: ${e.message}", 
+                suggestedTimeMinutes = 0
+            )
         }
     }
     private fun fallbackValidation(request: ExtensionRequest): ValidationResult {

@@ -12,6 +12,7 @@ class TimeLimitManager(private val activity: AppCompatActivity) {
 
     private val individualTimeLimits = mutableMapOf<String, Int>()
     private val sharedPrefs = activity.getSharedPreferences("time_limits", Context.MODE_PRIVATE)
+    private val originalLimitsPrefs = activity.getSharedPreferences("original_time_limits", Context.MODE_PRIVATE)
 
     fun checkTimeLimits(items: List<UsageItem>) {
         for (item in items) {
@@ -29,30 +30,74 @@ class TimeLimitManager(private val activity: AppCompatActivity) {
     }
 
     fun setTimeLimit(packageName: String, minutes: Int) {
+        // Save to memory cache
         individualTimeLimits[packageName] = minutes
+        
+        // Save current limit to preferences
         sharedPrefs.edit()
             .putInt(packageName, minutes)
             .apply()
+        
+        // Save original limit if this is the first time setting it
+        if (!originalLimitsPrefs.contains(packageName)) {
+            originalLimitsPrefs.edit()
+                .putInt(packageName, minutes)
+                .apply()
+            android.util.Log.d("TimeLimitManager", "Saved original limit for $packageName: $minutes minutes")
+        }
+        
         android.util.Log.d("TimeLimitManager", "Set time limit for $packageName: $minutes minutes")
     }
 
     fun getTimeLimit(packageName: String): Int {
-        return individualTimeLimits[packageName]
-            ?: sharedPrefs.getInt(packageName, 60)
+        // Check memory cache first
+        individualTimeLimits[packageName]?.let { return it }
+        
+        // Check current limits in preferences
+        val currentLimit = sharedPrefs.getInt(packageName, Int.MAX_VALUE)
+        if (currentLimit != Int.MAX_VALUE) {
+            individualTimeLimits[packageName] = currentLimit
+            return currentLimit
+        }
+        
+        // Return default of 60 minutes if no limit set
+        return 60
     }
 
     fun loadTimeLimits(): Map<String, Int> {
+        // Clear memory cache first
+        individualTimeLimits.clear()
+        
+        // Load from preferences
         val allPrefs = sharedPrefs.all
         for ((key, value) in allPrefs) {
-            if (value is Int) {
+            if (value is Int && key.isNotEmpty()) {
                 individualTimeLimits[key] = value
+                android.util.Log.d("TimeLimitManager", "Loaded limit for $key: $value minutes")
             }
         }
+        
+        android.util.Log.d("TimeLimitManager", "Loaded ${individualTimeLimits.size} time limits from storage")
         return individualTimeLimits.toMap()
     }
 
     fun getAllTimeLimits(): Map<String, Int> {
         return individualTimeLimits.toMap()
+    }
+    
+    fun getOriginalTimeLimit(packageName: String): Int {
+        return originalLimitsPrefs.getInt(packageName, 60)
+    }
+    
+    fun getAllOriginalTimeLimits(): Map<String, Int> {
+        val originalLimits = mutableMapOf<String, Int>()
+        val allPrefs = originalLimitsPrefs.all
+        for ((key, value) in allPrefs) {
+            if (value is Int && key.isNotEmpty()) {
+                originalLimits[key] = value
+            }
+        }
+        return originalLimits
     }
 
     private fun showTimeLimitAlert(appName: String, packageName: String, timeLimitMinutes: Int) {

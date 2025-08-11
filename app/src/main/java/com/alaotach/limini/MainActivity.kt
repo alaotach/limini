@@ -17,6 +17,7 @@ import android.app.usage.UsageStatsManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import java.io.ByteArrayOutputStream
+import android.os.Build
 
 class MainActivity : AppCompatActivity() {
     
@@ -162,11 +163,11 @@ class MainActivity : AppCompatActivity() {
                 permissionManager.requestOverlayPermission()
             }
             !permissionManager.isAccessibilityServiceEnabled() -> {
-                Toast.makeText(this, "Step 4: Enable Accessibility Service", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Optional: Enable Accessibility Service for enhanced features", Toast.LENGTH_SHORT).show()
                 permissionManager.requestAccessibilityPermission()
             }
             else -> {
-                Toast.makeText(this, "All permissions granted! You can now start using limini.", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "All permissions granted! You can now start using Limini.", Toast.LENGTH_LONG).show()
                 updatePermissionStatus()
                 runOnUiThread {
                     updateUIState()
@@ -181,73 +182,91 @@ class MainActivity : AppCompatActivity() {
         val hasOverlay = permissionManager.hasOverlayPermission()
         val hasAccessibility = permissionManager.isAccessibilityServiceEnabled()
         
-        if (hasUsage && hasNotif && hasOverlay && hasAccessibility) {
-            permissionCard.visibility = android.view.View.GONE
-            statusTextView.text = "ready to Monitor"
-            usageTextView.text = "All permissions granted. You can now start monitoring your app usage."
+        // Core permissions are enough to start monitoring
+        val corePermissionsGranted = hasUsage && hasNotif && hasOverlay
+        
+        if (corePermissionsGranted) {
+            if (hasAccessibility) {
+                permissionCard.visibility = android.view.View.GONE
+                statusTextView.text = "Ready to Monitor (Full Features)"
+                usageTextView.text = "All permissions granted. Full real-time monitoring available."
+            } else {
+                permissionCard.visibility = android.view.View.VISIBLE
+                statusTextView.text = "Ready to Monitor (Basic)"
+                usageTextView.text = "Core permissions granted. Basic monitoring active. Note: Some devices restrict accessibility for security."
+                setupPermissionsButton.text = "Try Enable Accessibility (Optional)"
+                permissionStatusText.text = "Optional: Accessibility Service for enhanced real-time monitoring\n(May be unavailable on some devices due to security restrictions)"
+            }
         } else {
             permissionCard.visibility = android.view.View.VISIBLE
             statusTextView.text = "Setup Required"
             val statusBuilder = StringBuilder()
-            val totalSteps = 4
+            val totalSteps = 3 // Only count core permissions
             var currentStep = 1
             
             if (!hasUsage) {
                 statusBuilder.append("Step $currentStep/$totalSteps: Usage Access permission needed")
                 setupPermissionsButton.text = "Grant Usage Access"
             } else {
-                statusBuilder.append("Usage Access granted\n")
+                statusBuilder.append("✓ Usage Access granted\n")
                 currentStep++
                 
                 if (!hasNotif) {
                     statusBuilder.append("Step $currentStep/$totalSteps: Notification permission needed")
                     setupPermissionsButton.text = "Grant Notifications"
                 } else {
-                    statusBuilder.append("Notifications granted\n")
+                    statusBuilder.append("✓ Notifications granted\n")
                     currentStep++
                     
                     if (!hasOverlay) {
                         statusBuilder.append("Step $currentStep/$totalSteps: Display over other apps permission needed")
                         setupPermissionsButton.text = "Grant Overlay Permission"
                     } else {
-                        statusBuilder.append(" Display over other apps granted\n")
-                        currentStep++
-                        
-                        if (!hasAccessibility) {
-                            statusBuilder.append("Step $currentStep/$totalSteps: Accessibility Service needed")
-                            setupPermissionsButton.text = "Enable Accessibility Service"
-                        }
+                        statusBuilder.append("✓ Display over other apps granted\n")
                     }
                 }
             }
             
             permissionStatusText.text = statusBuilder.toString().trim()
-            usageTextView.text = "Follow the setup to grant all required permissions."
+            usageTextView.text = "Follow the setup to grant required permissions."
         }
     }
 
     private fun startMonitoring() {
         if (!allPermissionsGranted()) {
             updatePermissionStatus()
-            Toast.makeText(this, "please grant all required permissions first", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Please grant required permissions first", Toast.LENGTH_SHORT).show()
             return
         }
         
-        if (!permissionManager.isAccessibilityServiceEnabled()) {
-            Toast.makeText(this, "please enable the Accessibility Service first", Toast.LENGTH_LONG).show()
-            permissionManager.requestAccessibilityPermission()
-            return
+        // Check if accessibility service is available for enhanced features
+        val hasAccessibility = permissionManager.isAccessibilityServiceEnabled()
+        
+        if (hasAccessibility) {
+            Toast.makeText(this, "Starting monitoring with enhanced real-time features", Toast.LENGTH_SHORT).show()
+            statusTextView.text = "Enhanced Monitoring Active"
+        } else {
+            Toast.makeText(this, "Starting basic monitoring (enable accessibility for enhanced features)", Toast.LENGTH_LONG).show()
+            statusTextView.text = "Basic Monitoring Active"
+            
+            // Start basic usage tracking service since accessibility isn't available
+            val basicServiceIntent = Intent(this, com.alaotach.limini.services.BasicUsageTrackingService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(basicServiceIntent)
+            } else {
+                startService(basicServiceIntent)
+            }
+            Log.d("MainActivity", "Started BasicUsageTrackingService")
         }
         
         isMonitoring = true
         updateUIState()
         
-        statusTextView.text = "Monitoring Active"
-        usageTextView.text = "monitoring started."
+        usageTextView.text = "App monitoring started."
         val intent = Intent("com.alaotach.limini.START_MONITORING")
         sendBroadcast(intent)
         
-        Toast.makeText(this, "Monitoring started", Toast.LENGTH_SHORT).show()
+        Log.d("MainActivity", "Monitoring started - Accessibility: $hasAccessibility")
     }
 
     private fun stopMonitoring() {
@@ -256,11 +275,16 @@ class MainActivity : AppCompatActivity() {
         
         statusTextView.text = "Monitoring Stopped"
         usageTextView.text = "App monitoring has been paused."
+        
+        // Stop basic service if it's running
+        val basicServiceIntent = Intent(this, com.alaotach.limini.services.BasicUsageTrackingService::class.java)
+        stopService(basicServiceIntent)
+        
         val intent = Intent("com.alaotach.limini.STOP_MONITORING")
         sendBroadcast(intent)
         
         Toast.makeText(this, "Monitoring stopped", Toast.LENGTH_SHORT).show()
-        Log.d("MainActivity", "Monitoring stopped")
+        Log.d("MainActivity", "Monitoring stopped - BasicUsageTrackingService stopped")
     }
 
     private fun updateUIState() {
@@ -286,8 +310,8 @@ class MainActivity : AppCompatActivity() {
         val hasUsage = permissionManager.hasUsagePermission()
         val hasNotif = permissionManager.hasNotifPermission()
         val hasOverlay = permissionManager.hasOverlayPermission()
-        val hasAccessibility = permissionManager.isAccessibilityServiceEnabled()
-        val allGranted = hasUsage && hasNotif && hasOverlay && hasAccessibility        
+        // Only require core permissions - accessibility is optional
+        val allGranted = hasUsage && hasNotif && hasOverlay        
         return allGranted
     }
 
@@ -398,7 +422,11 @@ class MainActivity : AppCompatActivity() {
             usageAdapter.submitList(userApps)
             appCountText.text = "${userApps.size} apps"
             
-            Log.d("MainActivity", "Loaded ${userApps.size} user apps")
+            // Load and set time limits on adapter
+            val currentLimits = timeLimitManager.getAllTimeLimits()
+            usageAdapter.setTimeLimits(currentLimits)
+            
+            Log.d("MainActivity", "Loaded ${userApps.size} user apps with ${currentLimits.size} time limits")
 
         } catch (e: Exception) {
             Log.e("MainActivity", "Error loading apps: ${e.message}", e)
@@ -454,6 +482,8 @@ class MainActivity : AppCompatActivity() {
         updatePermissionStatus()
         updateUIState()
         if (permissionManager.hasUsagePermission()) {
+            // Reload time limits to get any changes from services
+            timeLimitManager.loadTimeLimits()
             loadUserApps()
         }
         registerUsageReceiver()

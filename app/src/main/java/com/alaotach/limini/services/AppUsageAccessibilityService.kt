@@ -140,7 +140,10 @@ class AppUsageAccessibilityService : AccessibilityService() {
 
         if (currentLimit != Int.MAX_VALUE) {
             val actualExtension = if (extensionMinutes > 0) extensionMinutes else 5
-            val newLimit = currentLimit + actualExtension            
+            val currentUsageMs = getTotalUsageTime(packageName)
+            val currentUsageMinutes = (currentUsageMs / (1000 * 60)).toInt()
+            val newLimit = currentUsageMinutes + actualExtension
+            
             timeLimitPrefs.edit().putInt(packageName, newLimit).apply()
             timeLimitCache[packageName] = newLimit
             activeOverlays.remove(packageName)
@@ -150,11 +153,12 @@ class AppUsageAccessibilityService : AccessibilityService() {
             updateIntent.putExtra("packageName", packageName)
             updateIntent.putExtra("newTotalLimit", newLimit)
             sendBroadcast(updateIntent)
+            
             if (packageName == currPkg) {
                 updateNotification()
             }
         } else {
-            Log.w(TAG, "Cannot extend time for $packageName - no existing limit found")
+            Log.w(TAG, "no existing limit")
         }
     }
 

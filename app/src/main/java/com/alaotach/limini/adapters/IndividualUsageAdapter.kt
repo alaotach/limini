@@ -53,10 +53,9 @@ class IndividualUsageAdapter(
         val isTimeLimitEnabled = timeLimits.containsKey(item.packageName)
         val currentTimeLimit = if (isTimeLimitEnabled) timeLimits[item.packageName]!! else 60
 
-        holder.timeLimitSeekBar.max = 1440 // 24 hours in minutes
+        holder.timeLimitSeekBar.max = 1440
         holder.timeLimitSeekBar.progress = currentTimeLimit
 
-        // Detach listeners before setting state to prevent them from firing during bind
         holder.enableSwitch.setOnCheckedChangeListener(null)
         holder.timeLimitSeekBar.setOnSeekBarChangeListener(null)
 
@@ -78,7 +77,6 @@ class IndividualUsageAdapter(
             holder.timeLimitLabel.text = "Disabled"
         }
 
-        // Re-attach listeners now that the view is configured
         holder.timeLimitSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
@@ -131,8 +129,6 @@ class IndividualUsageAdapter(
         if (needsUpdate) {
             val index = currentList.indexOfFirst { it.packageName == packageName }
             if (index != -1) {
-                // Post to handler to ensure the update runs on the main thread
-                // and doesn't interfere with RecyclerView's layout pass.
                 Handler(Looper.getMainLooper()).post {
                     notifyItemChanged(index)
                 }
