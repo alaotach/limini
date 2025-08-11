@@ -24,7 +24,6 @@ class QuestionManager(private val context: Context) {
     }
     
     private val questionBank = mutableMapOf<String, MutableList<Question>>().apply {
-        // General Knowledge
         put("gk", mutableListOf(
             Question("gk1", CATEGORIES[0], "What is the capital of Australia?", 
                 listOf("Sydney", "Melbourne", "Canberra", "Perth"), "Canberra"),
@@ -38,7 +37,6 @@ class QuestionManager(private val context: Context) {
                 listOf("Monaco", "Vatican City", "San Marino", "Liechtenstein"), "Vatican City")
         ))
         
-        // Mathematics
         put("maths", mutableListOf(
             Question("math1", CATEGORIES[1], "What is 15 × 23?", 
                 listOf("345", "335", "355", "325"), "345"),
@@ -52,7 +50,6 @@ class QuestionManager(private val context: Context) {
                 listOf("3.14", "3.15", "3.16", "3.13"), "3.14")
         ))
         
-        // Science
         put("science", mutableListOf(
             Question("sci1", CATEGORIES[2], "What is the chemical symbol for Gold?", 
                 listOf("Gd", "Au", "Ag", "Go"), "Au"),
@@ -66,7 +63,6 @@ class QuestionManager(private val context: Context) {
                 listOf("90°C", "100°C", "110°C", "95°C"), "100°C")
         ))
         
-        // Technology
         put("tech", mutableListOf(
             Question("tech1", CATEGORIES[3], "What does 'HTTP' stand for?", 
                 listOf("HyperText Transfer Protocol", "High Tech Transfer Protocol", "Home Tool Transfer Protocol", "HyperText Translation Protocol"), "HyperText Transfer Protocol"),
@@ -80,7 +76,6 @@ class QuestionManager(private val context: Context) {
                 listOf("Universal Resource Locator", "Uniform Resource Locator", "Universal Reference Link", "Uniform Reference Locator"), "Uniform Resource Locator")
         ))
         
-        // Entertainment
         put("entertainment", mutableListOf(
             Question("ent1", CATEGORIES[4], "Which movie won the Oscar for Best Picture in 2020?", 
                 listOf("Joker", "1917", "Parasite", "Once Upon a Time in Hollywood"), "Parasite"),
@@ -94,7 +89,6 @@ class QuestionManager(private val context: Context) {
                 listOf("Dark", "Stranger Things", "The Umbrella Academy", "Ozark"), "Stranger Things")
         ))
         
-        // Anime
         put("anime", mutableListOf(
             Question("anime1", CATEGORIES[5], "Who is the main character in 'One Piece'?", 
                 listOf("Naruto", "Luffy", "Goku", "Ichigo"), "Luffy"),
@@ -112,11 +106,17 @@ class QuestionManager(private val context: Context) {
     private var usedQuestions = mutableSetOf<String>()
     
     fun getEnabledCategories(): Set<String> {
-        return sharedPrefs.getStringSet("enabled_categories", setOf("gk", "maths", "science")) ?: setOf("gk", "maths", "science")
+        val categories = sharedPrefs.getStringSet("enabled_categories", setOf("gk", "maths", "science")) ?: setOf("gk", "maths", "science")
+        android.util.Log.d("QuestionManager", "Getting enabled categories: $categories")
+        return categories
     }
     
     fun setEnabledCategories(categories: Set<String>) {
-        sharedPrefs.edit().putStringSet("enabled_categories", categories).apply()
+        android.util.Log.d("QuestionManager", "Setting enabled categories: $categories")
+        val result = sharedPrefs.edit().putStringSet("enabled_categories", categories).commit()
+        android.util.Log.d("QuestionManager", "Save result: $result")
+        val savedCategories = sharedPrefs.getStringSet("enabled_categories", null)
+        android.util.Log.d("QuestionManager", "Verified saved categories: $savedCategories")
     }
     
     fun getRandomQuestion(excludeUsed: Boolean = true): Question? {
@@ -134,7 +134,6 @@ class QuestionManager(private val context: Context) {
         }
         
         if (availableQuestions.isEmpty()) {
-            // Reset used questions if all are used
             usedQuestions.clear()
             for (category in enabledCategories) {
                 questionBank[category]?.let { questions ->

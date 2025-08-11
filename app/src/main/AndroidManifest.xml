@@ -3,6 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools">
     
     <!-- Required permissions -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
@@ -49,20 +51,7 @@
             android:parentActivityName=".MainActivity" />
         
         <service
-            android:name=".services.AppUsage"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
-            
-        <service
             android:name=".services.OverlayService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                      android:value="App blocking overlay service" />
-        </service>
-        
-        <service
-            android:name=".services.QuestionOverlayService"
             android:exported="false"
             android:foregroundServiceType="specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"

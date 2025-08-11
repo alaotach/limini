@@ -40,17 +40,42 @@ class MainActivity : AppCompatActivity() {
 
     private val usageReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            Log.d("MainActivity", "Usage data received")
-            
-            @Suppress("UNCHECKED_CAST", "DEPRECATION")
-            val usageList: ArrayList<HashMap<String, Any?>>? = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                intent?.getSerializableExtra("usageList", ArrayList::class.java) as? ArrayList<HashMap<String, Any?>>
-            } else {
-                intent?.getSerializableExtra("usageList") as? ArrayList<HashMap<String, Any?>>
-            }
+            when (intent?.action) {
+                "com.alaotach.limini.USAGE_UPDATE" -> {                    
+                    @Suppress("UNCHECKED_CAST", "DEPRECATION")
+                    val usageList: ArrayList<HashMap<String, Any?>>? = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                        intent.getSerializableExtra("usageList", ArrayList::class.java) as? ArrayList<HashMap<String, Any?>>
+                    } else {
+                        intent.getSerializableExtra("usageList") as? ArrayList<HashMap<String, Any?>>
+                    }
 
-            if (usageList != null && usageList.isNotEmpty()) {
-                updateAppsList(usageList)
+                    if (usageList != null && usageList.isNotEmpty()) {
+                        val topApp = usageList.firstOrNull()
+                        if (topApp != null) {
+                            val appName = topApp["appName"] as? String ?: "Unknown"
+                            val usageTime = topApp["usageTime"] as? Long ?: 0L
+                            val formattedTime = formatTime(usageTime)
+                            Log.d("MainActivity", "📊 Top app: $appName - $formattedTime")
+                        }
+                        
+                        updateAppsList(usageList)
+                    } else {
+                        Log.w("MainActivity", "Received empty or null usage list")
+                    }
+                }
+                "com.alaotach.limini.TIME_EXTENSION_GRANTED" -> {
+                    val packageName = intent.getStringExtra("packageName")
+                    val newTotalLimit = intent.getIntExtra("newTotalLimit", 0)
+                    
+                    if (packageName != null && newTotalLimit > 0) {
+                        Log.d("MainActivity", "new limit: $newTotalLimit minutes")
+                        timeLimitManager.setTimeLimit(packageName, newTotalLimit)
+                        usageAdapter.setTimeLimit(packageName, newTotalLimit)
+                        Toast.makeText(this@MainActivity, 
+                            "Time limit extended!", 
+                            Toast.LENGTH_LONG).show()
+                    }
+                }
             }
         }
     }
@@ -84,16 +109,11 @@ class MainActivity : AppCompatActivity() {
         startButton = findViewById(R.id.startButton)
         stopButton = findViewById(R.id.stopButton)
         settingsButton = findViewById(R.id.settingsButton)
-        
-        // Setup RecyclerView
         usageAdapter = IndividualUsageAdapter { packageName, minutes ->
             timeLimitManager.setTimeLimit(packageName, minutes)
-            Log.d("MainActivity", "Time limit set for $packageName: $minutes minutes")
         }
         usageRecyclerView.adapter = usageAdapter
         usageRecyclerView.layoutManager = LinearLayoutManager(this)
-        
-        // Initial UI state
         updateUIState()
     }
 
@@ -104,7 +124,11 @@ class MainActivity : AppCompatActivity() {
         }
         
         startButton.setOnClickListener {
-            startMonitoring()
+            if (startButton.isEnabled) {
+                startMonitoring()
+            } else {
+                Toast.makeText(this, "check permissions", Toast.LENGTH_LONG).show()
+            }
         }
         
         stopButton.setOnClickListener {
@@ -112,39 +136,41 @@ class MainActivity : AppCompatActivity() {
         }
         
         settingsButton.setOnClickListener {
-            Log.d("MainActivity", "Settings button clicked")
             val intent = Intent(this, SettingsActivity::class.java)
             startActivity(intent)
+        }
+        settingsButton.setOnLongClickListener {
+            Toast.makeText(this, "Refreshing permission status...", Toast.LENGTH_SHORT).show()
+            updatePermissionStatus()
+            updateUIState()
+            true
         }
     }
     
     private fun grantNextPermission() {
         when {
             !permissionManager.hasUsagePermission() -> {
-                Log.d("MainActivity", "Requesting Usage Access permission")
                 Toast.makeText(this, "Step 1: Grant Usage Access permission", Toast.LENGTH_SHORT).show()
                 permissionManager.requestUsagePermission()
             }
             !permissionManager.hasNotifPermission() -> {
-                Log.d("MainActivity", "Requesting Notification permission")
                 Toast.makeText(this, "Step 2: Grant Notification permission", Toast.LENGTH_SHORT).show()
                 permissionManager.requestNotifPermission()
             }
             !permissionManager.hasOverlayPermission() -> {
-                Log.d("MainActivity", "Requesting Overlay permission")
                 Toast.makeText(this, "Step 3: Grant Display over other apps permission", Toast.LENGTH_SHORT).show()
                 permissionManager.requestOverlayPermission()
             }
             !permissionManager.isAccessibilityServiceEnabled() -> {
-                Log.d("MainActivity", "Requesting Accessibility Service")
                 Toast.makeText(this, "Step 4: Enable Accessibility Service", Toast.LENGTH_SHORT).show()
                 permissionManager.requestAccessibilityPermission()
             }
             else -> {
-                Log.d("MainActivity", "All permissions granted!")
-                Toast.makeText(this, "All permissions granted! You can now start monitoring.", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "All permissions granted! You can now start using limini.", Toast.LENGTH_LONG).show()
                 updatePermissionStatus()
-                updateUIState()
+                runOnUiThread {
+                    updateUIState()
+                }
             }
         }
     }
@@ -196,45 +222,56 @@ class MainActivity : AppCompatActivity() {
             }
             
             permissionStatusText.text = statusBuilder.toString().trim()
-            usageTextView.text = "Follow the step-by-step setup to grant all required permissions for app monitoring and time limits."
+            usageTextView.text = "Follow the setup to grant all required permissions."
         }
     }
 
     private fun startMonitoring() {
         if (!allPermissionsGranted()) {
             updatePermissionStatus()
-            Toast.makeText(this, "Please grant all required permissions first", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "please grant all required permissions first", Toast.LENGTH_SHORT).show()
             return
         }
         
-        registerUsageReceiver()
+        if (!permissionManager.isAccessibilityServiceEnabled()) {
+            Toast.makeText(this, "please enable the Accessibility Service first", Toast.LENGTH_LONG).show()
+            permissionManager.requestAccessibilityPermission()
+            return
+        }
+        
         isMonitoring = true
         updateUIState()
         
         statusTextView.text = "Monitoring Active"
-        usageTextView.text = "Monitoring your app usage and enforcing time limits..."
+        usageTextView.text = "monitoring started."
+        val intent = Intent("com.alaotach.limini.START_MONITORING")
+        sendBroadcast(intent)
         
         Toast.makeText(this, "Monitoring started", Toast.LENGTH_SHORT).show()
-        Log.d("MainActivity", "Monitoring started")
     }
 
     private fun stopMonitoring() {
-        unregisterUsageReceiver()
         isMonitoring = false
         updateUIState()
         
         statusTextView.text = "Monitoring Stopped"
-        usageTextView.text = "App monitoring has been paused. Your apps are accessible without time limits."
+        usageTextView.text = "App monitoring has been paused."
+        val intent = Intent("com.alaotach.limini.STOP_MONITORING")
+        sendBroadcast(intent)
         
         Toast.makeText(this, "Monitoring stopped", Toast.LENGTH_SHORT).show()
         Log.d("MainActivity", "Monitoring stopped")
     }
 
     private fun updateUIState() {
-        startButton.isEnabled = !isMonitoring && allPermissionsGranted()
+        val allPermissionsOk = allPermissionsGranted()
+        startButton.isEnabled = !isMonitoring && allPermissionsOk
         stopButton.isEnabled = isMonitoring
         
-        if (isMonitoring) {
+        if (!allPermissionsOk && !isMonitoring) {
+            startButton.text = "Complete Setup First"
+            startButton.alpha = 0.5f
+        } else if (isMonitoring) {
             startButton.text = "Monitoring Active"
             startButton.alpha = 0.6f
             stopButton.alpha = 1.0f
@@ -246,10 +283,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun allPermissionsGranted(): Boolean {
-        return permissionManager.hasUsagePermission() &&
-               permissionManager.hasNotifPermission() &&
-               permissionManager.hasOverlayPermission() &&
-               permissionManager.isAccessibilityServiceEnabled()
+        val hasUsage = permissionManager.hasUsagePermission()
+        val hasNotif = permissionManager.hasNotifPermission()
+        val hasOverlay = permissionManager.hasOverlayPermission()
+        val hasAccessibility = permissionManager.isAccessibilityServiceEnabled()
+        val allGranted = hasUsage && hasNotif && hasOverlay && hasAccessibility        
+        return allGranted
     }
 
     private fun registerUsageReceiver() {
@@ -260,16 +299,19 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     0
                 }
-                registerReceiver(
-                    usageReceiver,
-                    IntentFilter("com.alaotach.limini.USAGE_UPDATE"),
-                    flags
-                )
+                
+                val intentFilter = IntentFilter().apply {
+                    addAction("com.alaotach.limini.USAGE_UPDATE")
+                    addAction("com.alaotach.limini.TIME_EXTENSION_GRANTED")
+                }
+                
+                registerReceiver(usageReceiver, intentFilter, flags)
                 isReceiverOn = true
-                Log.d("MainActivity", "Usage receiver registered")
             } catch (e: Exception) {
                 Log.e("MainActivity", "Failed to register receiver: ${e.message}")
             }
+        } else {
+            Log.d("MainActivity", "Usage receiver already registered")
         }
     }
 
@@ -408,19 +450,29 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        Log.d("MainActivity", "onResume called - checking permissions")
+        Log.d("MainActivity", "onResume called - checking permissions and registering receiver")
         updatePermissionStatus()
+        updateUIState()
         if (permissionManager.hasUsagePermission()) {
             loadUserApps()
         }
-        if (isMonitoring) {
-            registerUsageReceiver()
-        }
+        registerUsageReceiver()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        unregisterUsageReceiver()
     }
 
     override fun onDestroy() {
         super.onDestroy()
         unregisterUsageReceiver()
+    }
+
+    private fun formatTime(ms: Long): String {
+        val seconds = (ms / 1000) % 60
+        val minutes = ms / (1000 * 60)
+        return "${minutes}m ${seconds}s"
     }
 
     override fun onRequestPermissionsResult(

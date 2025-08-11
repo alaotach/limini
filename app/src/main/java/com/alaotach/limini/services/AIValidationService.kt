@@ -25,7 +25,6 @@ class AIValidationService(private val context: Context) {
                 val aiResponseJson = makeAIRequest(prompt)
                 parseValidationResponse(aiResponseJson)
             } catch (e: Exception) {
-                Log.e(TAG, "Error validating extension request with AI, using fallback.", e)
                 fallbackValidation(request)
             }
         }
@@ -66,7 +65,7 @@ class AIValidationService(private val context: Context) {
             connection.setRequestProperty("Content-Type", "application/json")
             connection.doOutput = true
             val jsonPayload = JSONObject().apply {
-                put("model", "gpt-3.5-turbo")
+                put("model", "openai/gpt-oss-120b")
                 put("messages", JSONObject().apply {
                     put("role", "user")
                     put("content", prompt)
@@ -106,7 +105,6 @@ class AIValidationService(private val context: Context) {
                 suggestedTimeMinutes = json.getInt("suggested_time")
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Error parsing AI response: $response", e)
             ValidationResult(approved = false, confidence = 0.0, feedback = "Error processing AI response.", suggestedTimeMinutes = 0)
         }
     }

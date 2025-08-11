@@ -31,13 +31,11 @@ class PermissionManager(private val activity: AppCompatActivity) {
     }
     
     fun requestUsagePermission() {
-        android.util.Log.d("PermissionManager", "Requesting Usage Access permission")
         Toast.makeText(activity, "Please grant 'Usage Access' permission to monitor app usage", Toast.LENGTH_LONG).show()
         activity.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
     }
     
     fun requestAccessibilityPermission() {
-        android.util.Log.d("PermissionManager", "Requesting Accessibility Service")
         Toast.makeText(activity, "Please enable 'Limini' in Accessibility settings for app monitoring", Toast.LENGTH_LONG).show()
         activity.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
     }
@@ -65,9 +63,14 @@ class PermissionManager(private val activity: AppCompatActivity) {
     fun isAccessibilityServiceEnabled(): Boolean {
         val manager = activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
         val services = manager.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+        
         for (service in services) {
-            if (service.resolveInfo.serviceInfo.packageName == activity.packageName &&
-                service.resolveInfo.serviceInfo.name == "com.alaotach.limini.services.AppUsageAccessibilityService") {
+            val servicePkg = service.resolveInfo.serviceInfo.packageName
+            val serviceName = service.resolveInfo.serviceInfo.name
+
+            if (servicePkg == activity.packageName &&
+                (serviceName.contains("AppUsageAccessibilityService") || 
+                 serviceName == "com.alaotach.limini.services.AppUsageAccessibilityService")) {
                 return true
             }
         }
@@ -75,14 +78,12 @@ class PermissionManager(private val activity: AppCompatActivity) {
     }
 
     fun requestNotifPermission() {
-        android.util.Log.d("PermissionManager", "Requesting Notification permission")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ActivityCompat.requestPermissions(activity, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
         }
     }
 
     fun requestOverlayPermission() {
-        android.util.Log.d("PermissionManager", "Requesting Overlay permission")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
                 data = android.net.Uri.parse("package:${activity.packageName}")

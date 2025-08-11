@@ -1,6 +1,8 @@
 package com.alaotach.limini.adapters
 
 import android.graphics.BitmapFactory
+import android.os.Handler
+import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -48,77 +50,94 @@ class IndividualUsageAdapter(
         holder.nameView.text = item.appName
         holder.timeView.text = formatTime(item.usageTime)
 
-        val currentTimeLimit = timeLimits[item.packageName] ?: 60
-
-        holder.timeLimitSeekBar.max = 180
-        holder.timeLimitSeekBar.progress = currentTimeLimit
-        holder.timeLimitLabel.text = "${currentTimeLimit} min"
-
         val isTimeLimitEnabled = timeLimits.containsKey(item.packageName)
-        holder.enableSwitch.isChecked = isTimeLimitEnabled
+        val currentTimeLimit = if (isTimeLimitEnabled) timeLimits[item.packageName]!! else 60
 
+        holder.timeLimitSeekBar.max = 1440 // 24 hours in minutes
+        holder.timeLimitSeekBar.progress = currentTimeLimit
+
+        // Detach listeners before setting state to prevent them from firing during bind
+        holder.enableSwitch.setOnCheckedChangeListener(null)
+        holder.timeLimitSeekBar.setOnSeekBarChangeListener(null)
+
+        holder.enableSwitch.isChecked = isTimeLimitEnabled
         holder.timeLimitSeekBar.isEnabled = isTimeLimitEnabled
         holder.timeLimitLabel.alpha = if (isTimeLimitEnabled) 1.0f else 0.5f
 
-        if (isTimeLimitEnabled) {
-            val timeLimitMs = currentTimeLimit * 60 * 1000L
-            val usagePercentage = (item.usageTime.toFloat() / timeLimitMs * 100).toInt()
-
-            when {
-                usagePercentage >= 100 -> {
-                    holder.timeView.setTextColor(0xFFFF0000.toInt())
-                    holder.nameView.setTextColor(0xFFFF0000.toInt())
-                }
-                usagePercentage >= 80 -> {
-                    holder.timeView.setTextColor(0xFFFF8C00.toInt())
-                    holder.nameView.setTextColor(0xFFFF8C00.toInt())
-                }
-                usagePercentage >= 60 -> {
-                    holder.timeView.setTextColor(0xFFFFD700.toInt())
-                    holder.nameView.setTextColor(0xFFFFD700.toInt())
-                }
-                else -> {
-                    holder.timeView.setTextColor(0xFF000000.toInt())
-                    holder.nameView.setTextColor(0xFF000000.toInt())
-                }
+        fun updateLabel(minutes: Int) {
+            holder.timeLimitLabel.text = if (minutes >= 60) {
+                "${minutes / 60}h ${minutes % 60}m"
+            } else {
+                "${minutes}m"
             }
-        } else {
-            holder.timeView.setTextColor(0xFF000000.toInt())
-            holder.nameView.setTextColor(0xFF000000.toInt())
         }
 
+        if (isTimeLimitEnabled) {
+            updateLabel(currentTimeLimit)
+        } else {
+            holder.timeLimitLabel.text = "Disabled"
+        }
+
+        // Re-attach listeners now that the view is configured
         holder.timeLimitSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                if (fromUser && holder.enableSwitch.isChecked) {
-                    val newLimit = maxOf(5, progress)
-                    holder.timeLimitLabel.text = "${newLimit} min"
-                    timeLimits[item.packageName] = newLimit
-                    onTimeLimitChanged(item.packageName, newLimit)
+                if (fromUser) {
+                    val adjustedProgress = progress.coerceAtLeast(5)
+                    updateLabel(adjustedProgress)
                 }
             }
+
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                val finalProgress = seekBar?.progress?.coerceAtLeast(5) ?: 5
+                onTimeLimitChanged(item.packageName, finalProgress)
+                setTimeLimit(item.packageName, finalProgress)
+            }
         })
 
-        holder.enableSwitch.setOnCheckedChangeListener(null)
         holder.enableSwitch.setOnCheckedChangeListener { _, isChecked ->
             holder.timeLimitSeekBar.isEnabled = isChecked
             holder.timeLimitLabel.alpha = if (isChecked) 1.0f else 0.5f
 
             if (isChecked) {
-                val timeLimit = maxOf(5, holder.timeLimitSeekBar.progress)
-                timeLimits[item.packageName] = timeLimit
-                onTimeLimitChanged(item.packageName, timeLimit)
+                val currentProgress = holder.timeLimitSeekBar.progress.coerceAtLeast(5)
+                updateLabel(currentProgress)
+                onTimeLimitChanged(item.packageName, currentProgress)
+                setTimeLimit(item.packageName, currentProgress)
             } else {
-                timeLimits.remove(item.packageName)
+                holder.timeLimitLabel.text = "Disabled"
                 onTimeLimitChanged(item.packageName, Int.MAX_VALUE)
+                setTimeLimit(item.packageName, Int.MAX_VALUE)
             }
         }
     }
 
-    fun setTimeLimit(packageName: String, minutes: Int) {
-        timeLimits[packageName] = minutes
+    fun setTimeLimits(limits: Map<String, Int>) {
+        timeLimits.clear()
+        timeLimits.putAll(limits)
         notifyDataSetChanged()
+    }
+
+    fun setTimeLimit(packageName: String, minutes: Int) {
+        val needsUpdate: Boolean
+        if (minutes == Int.MAX_VALUE) {
+            needsUpdate = timeLimits.remove(packageName) != null
+        } else {
+            val oldLimit = timeLimits.put(packageName, minutes)
+            needsUpdate = oldLimit != minutes
+        }
+
+        if (needsUpdate) {
+            val index = currentList.indexOfFirst { it.packageName == packageName }
+            if (index != -1) {
+                // Post to handler to ensure the update runs on the main thread
+                // and doesn't interfere with RecyclerView's layout pass.
+                Handler(Looper.getMainLooper()).post {
+                    notifyItemChanged(index)
+                }
+            }
+        }
     }
 
     fun getTimeLimit(packageName: String): Int {
