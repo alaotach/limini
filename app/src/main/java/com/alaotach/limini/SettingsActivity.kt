@@ -11,54 +11,56 @@ import com.alaotach.limini.data.QuestionCategory
 
 class SettingsActivity : AppCompatActivity() {
     
-    private lateinit var choice: SharedPreferences
+    private lateinit var sharedPrefs: SharedPreferences
     private lateinit var questionManager: QuestionManager
-    private lateinit var back: ImageButton
-    private lateinit var title: TextView
-    private lateinit var card: CardView
-    private lateinit var toggle: Switch
-    private lateinit var categories: LinearLayout
+    private lateinit var backButton: ImageButton
+    private lateinit var titleText: TextView
+    private lateinit var questionCard: CardView
+    private lateinit var enableQuestionsSwitch: Switch
+    private lateinit var categoryContainer: LinearLayout
     private val categoryCheckboxes = mutableMapOf<String, CheckBox>()
-    private lateinit var notifi: CardView
-    private lateinit var notifiToggle: Switch
-    private lateinit var reminder: Spinner
-    private lateinit var toggleeee: Switch
+    private lateinit var notificationCard: CardView
+    private lateinit var enableNotificationsSwitch: Switch
+    private lateinit var reminderFrequencySpinner: Spinner
+    private lateinit var encouragementSwitch: Switch
     private lateinit var aiCard: CardView
-    private lateinit var aiValid: Switch
-    private lateinit var strictness: Spinner
+    private lateinit var enableAIValidationSwitch: Switch
+    private lateinit var aiStrictnessSpinner: Spinner
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings_new)
         
-        choice = getSharedPreferences("settings", MODE_PRIVATE)
+        sharedPrefs = getSharedPreferences("settings", MODE_PRIVATE)
         questionManager = QuestionManager(this)
         
         initializeViews()
         setupListeners()
         loadSettings()
+        
+        Log.d("SettingsActivity", "Settings activity created")
     }
     
     private fun initializeViews() {
-        back = findViewById(R.id.back)
-        title = findViewById(R.id.title)
-        card = findViewById(R.id.card)
-        toggle = findViewById(R.id.toggle)
-        categories = findViewById(R.id.categories)
-        notifi = findViewById(R.id.notifi)
-        notifiToggle = findViewById(R.id.notifiToggle)
-        reminder = findViewById(R.id.reminder)
-        toggleeee = findViewById(R.id.toggleeee)
+        backButton = findViewById(R.id.backButton)
+        titleText = findViewById(R.id.titleText)
+        questionCard = findViewById(R.id.questionCard)
+        enableQuestionsSwitch = findViewById(R.id.enableQuestionsSwitch)
+        categoryContainer = findViewById(R.id.categoryContainer)
+        notificationCard = findViewById(R.id.notificationCard)
+        enableNotificationsSwitch = findViewById(R.id.enableNotificationsSwitch)
+        reminderFrequencySpinner = findViewById(R.id.reminderFrequencySpinner)
+        encouragementSwitch = findViewById(R.id.encouragementSwitch)
         aiCard = findViewById(R.id.aiCard)
-        aiValid = findViewById(R.id.aiValid)
-        strictness = findViewById(R.id.strictness)
+        enableAIValidationSwitch = findViewById(R.id.enableAIValidationSwitch)
+        aiStrictnessSpinner = findViewById(R.id.aiStrictnessSpinner)
         
         setupCategoryCheckboxes()
         setupSpinners()
     }
     
     private fun setupCategoryCheckboxes() {
-        categories.removeAllViews()
+        categoryContainer.removeAllViews()
         
         for (category in QuestionManager.CATEGORIES) {
             val checkBox = CheckBox(this).apply {
@@ -70,6 +72,7 @@ class SettingsActivity : AppCompatActivity() {
                     updateCategorySelection(category.id, isChecked)
                 }
             }
+            
             val description = TextView(this).apply {
                 text = category.description
                 textSize = 12f
@@ -77,8 +80,8 @@ class SettingsActivity : AppCompatActivity() {
                 setPadding(48, 0, 16, 16)
             }
             
-            categories.addView(checkBox)
-            categories.addView(description)
+            categoryContainer.addView(checkBox)
+            categoryContainer.addView(description)
             categoryCheckboxes[category.id] = checkBox
         }
     }
@@ -87,44 +90,43 @@ class SettingsActivity : AppCompatActivity() {
         val frequencies = arrayOf("Never", "Every 30 minutes", "Every hour", "Every 2 hours", "Daily")
         val frequencyAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, frequencies)
         frequencyAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        reminder.adapter = frequencyAdapter
-
+        reminderFrequencySpinner.adapter = frequencyAdapter
         val strictness = arrayOf("Lenient", "Moderate", "Strict")
         val strictnessAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, strictness)
         strictnessAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        strictness.adapter = strictnessAdapter
+        aiStrictnessSpinner.adapter = strictnessAdapter
     }
     
     private fun setupListeners() {
-        back.setOnClickListener {
+        backButton.setOnClickListener {
             finish()
         }
         
-        toggle.setOnCheckedChangeListener { _, isChecked ->
+        enableQuestionsSwitch.setOnCheckedChangeListener { _, isChecked ->
             saveSettings()
-            updatecategoriesVisibility(isChecked)
+            updateCategoryContainerVisibility(isChecked)
         }
         
-        notifiToggle.setOnCheckedChangeListener { _, _ ->
-            saveSettings()
-        }
-        
-        aiValid.setOnCheckedChangeListener { _, _ ->
+        enableNotificationsSwitch.setOnCheckedChangeListener { _, _ ->
             saveSettings()
         }
         
-        toggleeee.setOnCheckedChangeListener { _, _ ->
+        enableAIValidationSwitch.setOnCheckedChangeListener { _, _ ->
             saveSettings()
         }
         
-        reminder.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+        encouragementSwitch.setOnCheckedChangeListener { _, _ ->
+            saveSettings()
+        }
+        
+        reminderFrequencySpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
                 saveSettings()
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
         
-        strictness.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+        aiStrictnessSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
                 saveSettings()
             }
@@ -149,33 +151,33 @@ class SettingsActivity : AppCompatActivity() {
         Log.d("SettingsActivity", "Updated categories: $currentCategories")
     }
     
-    private fun updatecategoriesVisibility(enabled: Boolean) {
-        categories.visibility = if (enabled) android.view.View.VISIBLE else android.view.View.GONE
+    private fun updateCategoryContainerVisibility(enabled: Boolean) {
+        categoryContainer.visibility = if (enabled) android.view.View.VISIBLE else android.view.View.GONE
     }
     
     private fun loadSettings() {
-        val questionsEnabled = choice.getBoolean("questions_enabled", true)
-        toggle.isChecked = questionsEnabled
-        updatecategoriesVisibility(questionsEnabled)
+        val questionsEnabled = sharedPrefs.getBoolean("questions_enabled", true)
+        enableQuestionsSwitch.isChecked = questionsEnabled
+        updateCategoryContainerVisibility(questionsEnabled)
         val enabledCategories = questionManager.getEnabledCategories()
         for ((categoryId, checkBox) in categoryCheckboxes) {
             checkBox.isChecked = categoryId in enabledCategories
         }
-        notifiToggle.isChecked = choice.getBoolean("notifications_enabled", true)
-        toggleeee.isChecked = choice.getBoolean("encouragement_enabled", true)
-        reminder.setSelection(choice.getInt("reminder_frequency", 2))
-        aiValid.isChecked = choice.getBoolean("ai_validation_enabled", true)
-        strictness.setSelection(choice.getInt("ai_strictness", 1))
+        enableNotificationsSwitch.isChecked = sharedPrefs.getBoolean("notifications_enabled", true)
+        encouragementSwitch.isChecked = sharedPrefs.getBoolean("encouragement_enabled", true)
+        reminderFrequencySpinner.setSelection(sharedPrefs.getInt("reminder_frequency", 2))
+        enableAIValidationSwitch.isChecked = sharedPrefs.getBoolean("ai_validation_enabled", true)
+        aiStrictnessSpinner.setSelection(sharedPrefs.getInt("ai_strictness", 1))
     }
     
     private fun saveSettings() {
-        choice.edit().apply {
-            putBoolean("questions_enabled", toggle.isChecked)
-            putBoolean("notifications_enabled", notifiToggle.isChecked)
-            putBoolean("encouragement_enabled", toggleeee.isChecked)
-            putInt("reminder_frequency", reminder.selectedItemPosition)
-            putBoolean("ai_validation_enabled", aiValid.isChecked)
-            putInt("ai_strictness", strictness.selectedItemPosition)
+        sharedPrefs.edit().apply {
+            putBoolean("questions_enabled", enableQuestionsSwitch.isChecked)
+            putBoolean("notifications_enabled", enableNotificationsSwitch.isChecked)
+            putBoolean("encouragement_enabled", encouragementSwitch.isChecked)
+            putInt("reminder_frequency", reminderFrequencySpinner.selectedItemPosition)
+            putBoolean("ai_validation_enabled", enableAIValidationSwitch.isChecked)
+            putInt("ai_strictness", aiStrictnessSpinner.selectedItemPosition)
             apply()
         }
         

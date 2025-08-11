@@ -156,16 +156,12 @@ class MainActivity : AppCompatActivity() {
         val hasAccessibility = permissionManager.isAccessibilityServiceEnabled()
         
         if (hasUsage && hasNotif && hasOverlay && hasAccessibility) {
-            // All permissions granted
             permissionCard.visibility = android.view.View.GONE
             statusTextView.text = "ready to Monitor"
             usageTextView.text = "All permissions granted. You can now start monitoring your app usage."
         } else {
-            // Some permissions missing
             permissionCard.visibility = android.view.View.VISIBLE
             statusTextView.text = "Setup Required"
-            
-            // Show step-by-step progress
             val statusBuilder = StringBuilder()
             val totalSteps = 4
             var currentStep = 1

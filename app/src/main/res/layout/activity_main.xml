@@ -43,16 +43,15 @@
 
         <ImageButton
             android:id="@+id/settingsButton"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_menu_preferences"
-            android:tint="#FFFFFF"
-            android:contentDescription="Settings" />
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_margin="16dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_revert"
+            android:contentDescription="@string/back"
+            android:tint="?attr/colorPrimary" />
 
     </LinearLayout>
-
-    <!-- Status Card -->
     <androidx.cardview.widget.CardView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">Limini</string>
     <string name="accessibility_service_description">This service tracks which apps you use in real-time for usage monitoring. It only monitors app switches and does not access any content within apps.</string>
+    <string name="back">Back</string>
 </resources>
